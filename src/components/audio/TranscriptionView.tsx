@@ -86,6 +86,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [generatingSpeech, setGeneratingSpeech] = useState<string | null>(null) // translation_id being generated
   const [speechLoaded, setSpeechLoaded] = useState(false) // Whether speech files have been loaded
   const [translationsLoaded, setTranslationsLoaded] = useState(false) // Whether translations have been loaded
+  const [sendingToInsight, setSendingToInsight] = useState(false) // Whether sending to Insight
+  const [sentToInsight, setSentToInsight] = useState<string | null>(null) // transcription_id that was sent
 
   const loadTranscriptions = async () => {
     setLoading(true)
@@ -249,6 +251,29 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       alert(`Error analyzing: ${error.message}`)
     } finally {
       setAnalyzing(false)
+    }
+  }
+
+  const handleSendToInsight = async (transcriptionId: string) => {
+    setSendingToInsight(true)
+    try {
+      const response = await fetch('/api/insight/send-to-brain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcriptionId })
+      })
+      const result = await response.json()
+      
+      if (result.success) {
+        setSentToInsight(transcriptionId)
+        alert('Transcript sent to Insight! Metadata extraction completed.')
+      } else {
+        alert(`Failed to send to Insight: ${result.error}`)
+      }
+    } catch (error: any) {
+      alert(`Error sending to Insight: ${error.message}`)
+    } finally {
+      setSendingToInsight(false)
     }
   }
 
@@ -571,6 +596,21 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     }
   }, [activeTab, transcriptions])
 
+  // Check if already sent to Insight
+  useEffect(() => {
+    if (transcriptions.length > 0 && finalVersion) {
+      const transcriptionId = transcriptions[0].id
+      fetch(`/api/insight/send-to-brain?transcription_id=${transcriptionId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.data) {
+            setSentToInsight(transcriptionId)
+          }
+        })
+        .catch(err => console.error('Error checking Insight status:', err))
+    }
+  }, [transcriptions, finalVersion])
+
   return (
     <div className="mt-4">
       <button
@@ -889,13 +929,34 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                   <div key={transcription.id} className="bg-white p-4 rounded border border-green-300">
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-sm font-semibold text-green-700">✓ {finalVersionObj.type} - Final Version</h3>
-                      <button
-                        onClick={() => handleAnalyze(transcription.id)}
-                        disabled={analyzing}
-                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm disabled:opacity-50"
-                      >
-                        {analyzing ? 'Analyzing...' : 'Send for Analysis'}
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleAnalyze(transcription.id)}
+                          disabled={analyzing}
+                          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm disabled:opacity-50"
+                        >
+                          {analyzing ? 'Analyzing...' : 'Send for Analysis'}
+                        </button>
+                        <button
+                          onClick={() => handleSendToInsight(transcription.id)}
+                          disabled={sendingToInsight || sentToInsight === transcription.id}
+                          className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {sendingToInsight ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Processing...
+                            </>
+                          ) : sentToInsight === transcription.id ? (
+                            '✓ Sent to Insight'
+                          ) : (
+                            '🚀 Send to Insight'
+                          )}
+                        </button>
+                      </div>
                     </div>
                     
                     {/* Dubbing Script Format - Always Visible */}

@@ -370,10 +370,27 @@ _None yet - Ready to build features!_
 - **Database:** Migration files created for easy deployment to production
 - **Security:** Fixed RLS policy that was too permissive, now properly validates ownership
 
-### Next Up
-- [ ] Run RLS fix SQL in Supabase (user needs to apply)
-- [ ] Test transcription creation after RLS fix
-- [ ] Move to Phase 4: Summary Generation
+## Current Session: Session 5 - Insight Pillar (Phase 1 Complete)
+
+**Date:** January 27, 2025  
+**Status:** ✅ Phase 1 Complete (Metadata Layer)  
+**Focus:** Building the Insight knowledge management layer
+
+### What I Completed
+- ✅ Created Insight database schema (insight_transcripts, insight_metadata, insight_tags, insight_pipeline_status, insight_content_outputs)
+- ✅ Built `/api/insight/send-to-brain` endpoint with Claude integration
+- ✅ Implemented metadata extraction using the rulebook
+- ✅ Added "🚀 Send to Insight" button to Final Version tab
+- ✅ Automatic check if transcript already sent to Insight
+
+### Next Up - INSIGHT PILLAR (Phase 2: Search Layer)
+- [ ] Create basic admin review dashboard for metadata approval
+- [ ] Build Insight UI at `/insight` route  
+- [ ] Implement chunking and embedding system for semantic search
+- [ ] Add timestamp-based search navigation
+
+### Deferred
+- [ ] Phase 4: Content generation (emails, LinkedIn, blog) - will be Phase 3
 
 ---
 
