@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { ANALYSIS_USER_PROMPT } from '@/lib/prompts/transcription-analysis'
 
 interface Transcription {
   id: string
@@ -73,6 +74,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [finalVersion, setFinalVersion] = useState<string | null>(null) // ID of the promoted final version
   const [analysis, setAnalysis] = useState<any>(null)
   const [analyzing, setAnalyzing] = useState(false)
+  const [showAnalysisInfo, setShowAnalysisInfo] = useState(false)
 
   const loadTranscriptions = async () => {
     setLoading(true)
@@ -573,7 +575,68 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                 </div>
               ) : analysis ? (
                 <div className="bg-white p-4 rounded border border-gray-200">
-                  <h3 className="text-sm font-semibold mb-3">Content Analysis</h3>
+                  <div className="flex items-center gap-2 mb-3">
+                    <h3 className="text-sm font-semibold">Content Analysis</h3>
+                    <button
+                      onClick={() => setShowAnalysisInfo(!showAnalysisInfo)}
+                      className="relative"
+                      title="Analysis Instructions"
+                    >
+                      <svg className="w-4 h-4 text-gray-400 hover:text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Info Popup */}
+                  {showAnalysisInfo && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowAnalysisInfo(false)}>
+                      <div className="bg-white p-6 rounded-lg max-w-2xl max-h-96 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-lg font-semibold">Analysis Instructions</h3>
+                          <button onClick={() => setShowAnalysisInfo(false)} className="text-gray-500 hover:text-gray-700">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                        <div className="text-sm space-y-2">
+                          <div>
+                            <p className="font-medium mb-1">1. CONTENT_TYPE:</p>
+                            <p className="text-gray-600">The primary category (Tutorial, Presentation, Interview, Marketing, Entertainment, Educational, Product Demo, Meeting, Training)</p>
+                          </div>
+                          <div>
+                            <p className="font-medium mb-1">2. THEMATIC_TAGS:</p>
+                            <p className="text-gray-600">An array of 3-5 key themes or topics (e.g., ["Healthcare", "Emergency Medicine", "Continuing Education"])</p>
+                          </div>
+                          <div>
+                            <p className="font-medium mb-1">3. KEY_CONCEPTS:</p>
+                            <p className="text-gray-600">An array of the main concepts covered (e.g., ["CT Utilization", "Clinical Decision Making", "Patient Care"])</p>
+                          </div>
+                          <div>
+                            <p className="font-medium mb-1">4. TARGET_AUDIENCE:</p>
+                            <p className="text-gray-600">Who is the primary audience? (Healthcare Providers, Emergency Physicians, Medical Students, General Public)</p>
+                          </div>
+                          <div>
+                            <p className="font-medium mb-1">5. TONE:</p>
+                            <p className="text-gray-600">The overall tone and style (Professional, Casual, Technical, Conversational, Educational)</p>
+                          </div>
+                          <div>
+                            <p className="font-medium mb-1">6. DURATION_CATEGORY:</p>
+                            <p className="text-gray-600">How long is this content? (Short - under 5 min, Medium - 5-15 min, Long - 15+ min)</p>
+                          </div>
+                          <div>
+                            <p className="font-medium mb-1">7. LANGUAGE_STYLE:</p>
+                            <p className="text-gray-600">The complexity of language used (Technical/Jargon-Heavy, Moderate, Simple/Layperson-Friendly)</p>
+                          </div>
+                          <div>
+                            <p className="font-medium mb-1">8. SUMMARY:</p>
+                            <p className="text-gray-600">A brief 2-3 sentence summary of the content</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   
                   <div className="space-y-3">
                     {analysis.content_type && (
@@ -627,6 +690,62 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                         <p className="text-sm text-gray-700 mt-1">{analysis.summary}</p>
                       </div>
                     )}
+                  </div>
+
+                  {/* Dubbing Script and Complete Transcript */}
+                  <div className="border-t border-gray-200 pt-4 mt-4 space-y-4">
+                    {transcriptions.map((transcription) => {
+                      let finalVersionObj = null
+                      
+                      if (finalVersion && finalVersion.startsWith('t1-') && finalVersion.includes(transcription.id)) {
+                        finalVersionObj = {
+                          id: finalVersion,
+                          type: transcription.transcription_type,
+                          text: transcription.raw_text,
+                          segments: transcription.json_with_timestamps?.segments || [],
+                          metadata: transcription.json_with_timestamps?.metadata
+                        }
+                      } else if (finalVersion && transcription.versions?.some(v => v.id === finalVersion)) {
+                        const version = transcription.versions.find(v => v.id === finalVersion)
+                        finalVersionObj = {
+                          id: finalVersion,
+                          type: version.version_type,
+                          text: version.edited_text,
+                          segments: version.json_with_timestamps?.segments || [],
+                          metadata: transcription.json_with_timestamps?.metadata
+                        }
+                      }
+                      
+                      if (!finalVersionObj) return null
+                      
+                      return (
+                        <div key={transcription.id} className="space-y-3">
+                          {/* Dubbing Script Format */}
+                          {finalVersionObj.segments.length > 0 && (
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-xs font-semibold text-gray-700">Dubbing Script Format</h4>
+                              </div>
+                              <div className="bg-purple-50 border border-purple-200 rounded p-3 max-h-48 overflow-y-auto">
+                                <pre className="whitespace-pre-wrap text-xs font-mono">
+                                  {finalVersionObj.segments.map(seg => `[${formatTime(seg.start)}-${formatTime(seg.end)}]\n${seg.text}\n`).join('\n')}
+                                </pre>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Complete Transcript */}
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="text-xs font-semibold text-gray-700">Complete Transcript</h4>
+                            </div>
+                            <div className="bg-gray-50 border border-gray-200 rounded p-3 max-h-48 overflow-y-auto">
+                              <p className="text-sm leading-relaxed whitespace-pre-wrap">{finalVersionObj.text}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               ) : (
