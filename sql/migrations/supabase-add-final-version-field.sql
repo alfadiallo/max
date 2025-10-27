@@ -11,3 +11,4 @@ CREATE INDEX IF NOT EXISTS idx_max_transcriptions_final_version ON max_transcrip
 
 COMMENT ON COLUMN max_transcriptions.final_version_id IS 'The version_id (from max_transcription_versions) that has been promoted to Final';
 
+

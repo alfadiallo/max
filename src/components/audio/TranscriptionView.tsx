@@ -84,6 +84,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [savingTranslation, setSavingTranslation] = useState(false)
   const [generatedSpeech, setGeneratedSpeech] = useState<any[]>([]) // Array of generated speech files
   const [generatingSpeech, setGeneratingSpeech] = useState<string | null>(null) // translation_id being generated
+  const [speechLoaded, setSpeechLoaded] = useState(false) // Whether speech files have been loaded
+  const [translationsLoaded, setTranslationsLoaded] = useState(false) // Whether translations have been loaded
 
   const loadTranscriptions = async () => {
     setLoading(true)
@@ -270,9 +272,33 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       const result = await response.json()
       if (result.success) {
         setTranslations(result.data || [])
+        // Load speech files for all translations
+        await loadSpeechFilesForTranslations(result.data || [])
       }
+      setTranslationsLoaded(true)
     } catch (error) {
       console.error('Error loading translations:', error)
+      setTranslationsLoaded(true) // Set to true even on error to prevent infinite loading
+    }
+  }
+
+  const loadSpeechFilesForTranslations = async (translations: any[]) => {
+    try {
+      const allSpeechFiles: any[] = []
+      
+      for (const translation of translations) {
+        const response = await fetch(`/api/speech/generate?translation_id=${translation.id}`)
+        const result = await response.json()
+        if (result.success && result.data) {
+          allSpeechFiles.push(...result.data)
+        }
+      }
+      
+      setGeneratedSpeech(allSpeechFiles)
+      setSpeechLoaded(true)
+    } catch (error) {
+      console.error('Error loading speech files:', error)
+      setSpeechLoaded(true) // Set to true even on error to prevent infinite loading
     }
   }
 
@@ -288,10 +314,18 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       })
       
       const result = await response.json()
+      // Always reload translations (even on error) to sync UI state
+      await loadTranslations()
+      
       if (result.success) {
-        loadTranslations() // Reload translations
+        // Success - translations already reloaded
       } else {
-        alert(`Translation failed: ${result.error}`)
+        // Check if it's a duplicate error (which is actually OK)
+        if (result.error && result.error.includes('already exists')) {
+          console.log(`Translation for ${languageCode} already exists - UI will update`)
+        } else {
+          alert(`Translation failed: ${result.error}`)
+        }
       }
     } catch (error) {
       console.error('Error generating translation:', error)
@@ -316,11 +350,9 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       
       const result = await response.json()
       if (result.success) {
-        // Reload speech files
-        const speechResponse = await fetch(`/api/speech/generate?translation_id=${translationId}`)
-        const speechResult = await speechResponse.json()
-        if (speechResult.success) {
-          setGeneratedSpeech(speechResult.data || [])
+        // Reload all speech files for all translations
+        if (translations.length > 0) {
+          await loadSpeechFilesForTranslations(translations)
         }
       } else {
         alert(`Speech generation failed: ${result.error}`)
@@ -481,7 +513,16 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           }
         }
         
-        loadTranslations() // Reload to show new version
+        // Reload translations to get the new version
+        const reloadResponse = await fetch(`/api/transcriptions/${transcriptions[0].id}/translate`)
+        const reloadResult = await reloadResponse.json()
+        if (reloadResult.success) {
+          const updatedTranslations = reloadResult.data || []
+          setTranslations(updatedTranslations)
+          // Reload speech files since old ones were deleted
+          await loadSpeechFilesForTranslations(updatedTranslations)
+        }
+        
         setEditingTranslation(null)
         setEditedTranslationText('')
         setEditedTranslationSegments([])
@@ -500,6 +541,27 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     setEditingTranslation(null)
     setEditedTranslationText('')
     setEditedTranslationSegments([])
+  }
+
+  const handleDownloadSpeech = async (audioUrl: string, languageCode: string) => {
+    try {
+      // Fetch the audio file
+      const response = await fetch(audioUrl)
+      const blob = await response.blob()
+      
+      // Create a download link and trigger download
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `speech_${languageCode}_${Date.now()}.mp3`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error downloading audio:', error)
+      alert('Failed to download audio file')
+    }
   }
 
   // Load translations when tab switches to translations
@@ -1064,7 +1126,93 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                 </p>
               ) : (
                 <>
-                  <p className="text-sm text-gray-600 mb-4">Translate your final transcription into multiple languages:</p>
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm text-gray-600">Translate your final transcription into multiple languages:</p>
+                    <div className="flex gap-2">
+                      {translationsLoaded && transcriptions.length > 0 && (() => {
+                        const allLanguages = [
+                          { code: 'sp', name: 'Spanish' },
+                          { code: 'pr', name: 'Portuguese' },
+                          { code: 'ar', name: 'Arabic' },
+                          { code: 'fr', name: 'French' },
+                          { code: 'ge', name: 'German' },
+                          { code: 'it', name: 'Italian' },
+                          { code: 'ma', name: 'Mandarin' },
+                          { code: 'ja', name: 'Japanese' },
+                          { code: 'hi', name: 'Hindi' }
+                        ]
+                        const existingCodes = translations.map((t: any) => t.language_code)
+                        const toTranslate = allLanguages.filter(lang => !existingCodes.includes(lang.code))
+                        
+                        if (toTranslate.length === 0) return null // All languages translated
+                        
+                        return <button
+                          onClick={async () => {
+                            
+                            console.log(`Batch translating ${toTranslate.length} languages...`)
+                            for (const lang of toTranslate) {
+                              console.log(`Translating to ${lang.name}...`)
+                              await generateTranslation(lang.code)
+                              // Small delay between translations to avoid rate limits
+                              await new Promise(resolve => setTimeout(resolve, 500))
+                            }
+                            console.log('Batch translation complete!')
+                          }}
+                          disabled={generatingTranslation !== null}
+                          className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {generatingTranslation !== null ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Translating...
+                            </>
+                          ) : (
+                            `🚀 Batch Translate ${toTranslate.length} Languages`
+                          )}
+                        </button>
+                      })()}
+                      {translations.length > 0 && speechLoaded && (() => {
+                        // Count translations without speech
+                        const translationsWithoutSpeech = translations.filter((t: any) => {
+                          const hasSpeech = generatedSpeech.some((s: any) => s.translation_id === t.id && s.status === 'completed')
+                          return !hasSpeech
+                        })
+                        
+                        if (translationsWithoutSpeech.length > 0) {
+                          return (
+                            <button
+                              onClick={async () => {
+                                for (const translation of translationsWithoutSpeech) {
+                                  const langCode = translation.language_code
+                                  await generateSpeech(translation.id, langCode)
+                                  // Small delay to avoid rate limits
+                                  await new Promise(resolve => setTimeout(resolve, 1000))
+                                }
+                              }}
+                              disabled={generatingSpeech !== null}
+                              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm disabled:opacity-50 flex items-center gap-2"
+                            >
+                              {generatingSpeech !== null ? (
+                                <>
+                                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Generating Speech...
+                                </>
+                              ) : (
+                                `🎵 Generate Speech for ${translationsWithoutSpeech.length} Languages`
+                              )}
+                            </button>
+                          )
+                        }
+                        return null
+                      })()}
+                    </div>
+                  </div>
                   <div className="grid grid-cols-3 gap-4">
                     {/* Languages array */}
                     {[
@@ -1074,7 +1222,9 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                       { flag: '🇫🇷', name: 'French', code: 'fr' },
                       { flag: '🇩🇪', name: 'German', code: 'ge' },
                       { flag: '🇮🇹', name: 'Italian', code: 'it' },
-                      { flag: '🇨🇳', name: 'Mandarin', code: 'ma' }
+                      { flag: '🇨🇳', name: 'Mandarin', code: 'ma' },
+                      { flag: '🇯🇵', name: 'Japanese', code: 'ja' },
+                      { flag: '🇮🇳', name: 'Hindi', code: 'hi' }
                     ].map((lang) => {
                       const translation = translations.find((t: any) => t.language_code === lang.code)
                       const isGenerating = generatingTranslation === lang.code
@@ -1104,12 +1254,9 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                           ) : translation ? (
                             <div className="space-y-2">
                               <div className="flex gap-2">
-                                <button className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm" disabled>
-                                  ✓ Complete
-                                </button>
                                 <button 
                                   onClick={() => handleEditTranslation(translation)}
-                                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
                                 >
                                   Edit
                                 </button>
@@ -1128,13 +1275,22 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                                       <div className="border border-green-200 rounded p-2 bg-green-50">
                                         <div className="text-xs text-gray-600 mb-1">🎵 Generated Audio</div>
                                         <audio controls className="w-full" src={speech.audio_url}></audio>
-                                        <a 
-                                          href={speech.audio_url} 
-                                          download
-                                          className="block text-xs text-green-700 hover:text-green-900 mt-1 text-center"
-                                        >
-                                          Download MP3
-                                        </a>
+                                        <div className="flex gap-2 mt-2">
+                                          <button 
+                                            onClick={() => handleDownloadSpeech(speech.audio_url, lang.code)}
+                                            className="flex-1 px-3 py-2 bg-green-600 text-white text-xs rounded hover:bg-green-700 text-center"
+                                          >
+                                            ↓ Download
+                                          </button>
+                                          <button 
+                                            onClick={() => generateSpeech(translation.id, lang.code)}
+                                            disabled={isGenerating}
+                                            className="flex-1 px-3 py-2 bg-orange-600 text-white text-xs rounded hover:bg-orange-700 disabled:opacity-50"
+                                            title="Delete and regenerate speech"
+                                          >
+                                            🔄 Re-gen
+                                          </button>
+                                        </div>
                                       </div>
                                     ) : (
                                       <button 

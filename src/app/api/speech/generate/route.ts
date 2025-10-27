@@ -66,9 +66,29 @@ export async function POST(req: NextRequest) {
       .eq('language_code', language_code)
       .single()
 
-    // If it exists and is completed, return it
+    // If it exists and is completed, delete it to regenerate
     if (existingSpeech && existingSpeech.status === 'completed') {
-      return NextResponse.json({ success: true, data: existingSpeech }, { status: 200 })
+      // Delete old speech file from storage
+      if (existingSpeech.audio_url) {
+        try {
+          // Extract file path from URL
+          const urlPath = existingSpeech.audio_url.split('/generated-speech/')[1]
+          const filePath = `generated-speech/${urlPath}`
+          
+          await supabase.storage
+            .from('max-audio')
+            .remove([filePath])
+        } catch (storageError) {
+          console.error('Error deleting old speech file:', storageError)
+          // Continue anyway
+        }
+      }
+      
+      // Delete old speech record
+      await supabase
+        .from('max_generated_speech')
+        .delete()
+        .eq('id', existingSpeech.id)
     }
 
     // Check API key
@@ -84,17 +104,24 @@ export async function POST(req: NextRequest) {
       apiKey: apiKey
     })
 
-    // Voice mapping for each language
+    // Voice mapping for each language (all female voices)
     const voiceMap: Record<string, string> = {
-      'sp': 'ThT5KcBeYPX3keUQqHPh', // Serena - Spanish female (good quality)
-      'pr': 'onwK4e9ZLuTAKqWW03F9', // Antoni - Portuguese
-      'ar': 'VR6AewLTigWG4xSOukaG', // Arnold - Arabic
-      'fr': 'EXAVITQu4vr4xnSDxMaL', // Bella - French
-      'ge': 'ErXwobaYiN019PkySvjV', // Dorothy - German
-      'it': 'MF3mGyEYCl7XYWbV9V6O', // Elli - Italian
-      'ma': 'LcfcDJNUP1GQjkzn1xUU' // Gigi - Mandarin
+      'sp': 'ThT5KcBeYPX3keUQqHPh', // Serena - Spanish female
+      'pr': 'EXAVITQu4vr4xnSDxMaL', // Bella - Portuguese (Bella works for Portuguese too)
+      'ar': 'EXAVITQu4vr4xnSDxMaL', // Bella - Arabic (Bella has good accent)
+      'fr': 'EXAVITQu4vr4xnSDxMaL', // Bella - French female
+      'ge': 'EXAVITQu4vr4xnSDxMaL', // Bella - German (multilingual voice, female)
+      'it': 'MF3mGyEYCl7XYWbV9V6O', // Elli - Italian female
+      'ma': 'LcfcDJNUP1GQjkzn1xUU', // Gigi - Mandarin female
+      'ja': 'AZnzlk1XvdvUeBnXmlld', // Domi - Japanese female
+      'hi': 'EXAVITQu4vr4xnSDxMaL' // Bella - Hindi (good multilingual voice)
     }
     
+    // Calculate expected duration based on segments
+    const expectedDuration = segments.length > 0 
+      ? segments[segments.length - 1].end 
+      : null
+
     // For testing with very short text to minimize token usage
     const MAX_TEST_LENGTH = process.env.ELEVENLABS_TEST_MAX_LENGTH ? parseInt(process.env.ELEVENLABS_TEST_MAX_LENGTH) : 500
     if (textToSynthesize.length > MAX_TEST_LENGTH) {
@@ -102,6 +129,8 @@ export async function POST(req: NextRequest) {
       textToSynthesize = textToSynthesize.substring(0, MAX_TEST_LENGTH) + ' [truncated for testing]'
       console.log(`Truncated to ${textToSynthesize.length} characters`)
     }
+
+    console.log(`Expected duration: ${expectedDuration}s, Segments: ${segments.length}`)
 
     const voiceId = voiceMap[language_code] || 'pNInz6obpgDQGcFmaJgB' // Default to Adam
     console.log('Voice ID:', voiceId, 'Text length:', textToSynthesize.length)
@@ -246,63 +275,37 @@ export async function POST(req: NextRequest) {
       
       console.log('Insert payload:', JSON.stringify(insertPayload, null, 2))
       
-      if (existingSpeech) {
-        // Update existing record
-        const { data: updatedSpeech, error: updateError } = await supabase
-          .from('max_generated_speech')
-          .update({
-            audio_url: urlData.publicUrl,
-            audio_duration_seconds: estimatedDuration,
-            audio_file_size_bytes: audioBuffer.length,
-            status: 'completed',
-            voice_id: voiceId,
-            voice_type: 'generic',
-            speech_source: translation.final_version_id ? 'edited_text' : 'original_text'
-          })
-          .eq('id', existingSpeech.id)
-          .select()
-          .single()
+      // Always create new record (old speech was already deleted if it existed)
+      console.log('Attempting database insert with payload:', insertPayload)
+      
+      // Debug: Try to query the table to see if it exists
+      const { data: testQuery, error: testError } = await supabase
+        .from('max_generated_speech')
+        .select('id')
+        .limit(1)
+      
+      console.log('Test query result - table exists:', !testError, 'Error:', testError)
+      
+      const { data: newSpeech, error: insertError } = await supabase
+        .from('max_generated_speech')
+        .insert(insertPayload)
+        .select()
+        .single()
 
-        if (updateError) {
-          console.error('Database update error:', updateError)
-          throw updateError
-        }
-
-        console.log('Database record updated successfully')
-        return NextResponse.json({ success: true, data: updatedSpeech }, { status: 200 })
-      } else {
-        // Create new record
-        console.log('Attempting database insert with payload:', insertPayload)
-        
-        // Debug: Try to query the table to see if it exists
-        const { data: testQuery, error: testError } = await supabase
-          .from('max_generated_speech')
-          .select('id')
-          .limit(1)
-        
-        console.log('Test query result - table exists:', !testError, 'Error:', testError)
-        
-        const { data: newSpeech, error: insertError } = await supabase
-          .from('max_generated_speech')
-          .insert(insertPayload)
-          .select()
-          .single()
-
-        if (insertError) {
-          console.error('Database insert error object:', insertError)
-          console.error('Insert error type:', typeof insertError)
-          console.error('Insert error keys:', Object.keys(insertError || {}))
-          console.error('Insert error code:', insertError?.code)
-          console.error('Insert error message:', insertError?.message)
-          console.error('Insert error details:', insertError?.details)
-          console.error('Insert error hint:', insertError?.hint)
-          console.error('Full error JSON:', JSON.stringify(insertError, Object.getOwnPropertyNames(insertError), 2))
-          throw insertError
-        }
-
-        console.log('Database record created successfully')
-        return NextResponse.json({ success: true, data: newSpeech }, { status: 201 })
+      if (insertError) {
+        console.error('Database insert error object:', insertError)
+        console.error('Insert error type:', typeof insertError)
+        console.error('Insert error keys:', Object.keys(insertError || {}))
+        console.error('Insert error code:', insertError?.code)
+        console.error('Insert error message:', insertError?.message)
+        console.error('Insert error details:', insertError?.details)
+        console.error('Insert error hint:', insertError?.hint)
+        console.error('Full error JSON:', JSON.stringify(insertError, Object.getOwnPropertyNames(insertError), 2))
+        throw insertError
       }
+
+      console.log('Database record created successfully')
+      return NextResponse.json({ success: true, data: newSpeech }, { status: 201 })
     } catch (uploadError: any) {
       console.error('Upload or database error type:', typeof uploadError)
       console.error('Upload or database error keys:', Object.keys(uploadError || {}))

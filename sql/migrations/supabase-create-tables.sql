@@ -225,11 +225,11 @@ CREATE INDEX IF NOT EXISTS idx_max_feedback_created_at ON max_feedback_log(creat
 INSERT INTO max_project_types (name, slug) VALUES
   ('Lecture', 'lecture'),
   ('Webinar', 'webinar'),
-  ('ISA', 'isa'),
+  ('KE Track - Invisalign Smile Architect', 'ke-track-isa'),
+  ('KE Track - Team', 'ke-track-team'),
   ('Fire-Virtual', 'fire-virtual'),
   ('Podcast', 'podcast'),
-  ('C-Suite Presentation', 'c-suite'),
-  ('Other', 'other')
+  ('C-Suite Presentation', 'c-suite')
 ON CONFLICT (slug) DO NOTHING;
 
 -- =====================================================

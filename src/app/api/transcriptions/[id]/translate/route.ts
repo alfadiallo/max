@@ -80,7 +80,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       'fr': 'French',
       'ge': 'German',
       'it': 'Italian',
-      'ma': 'Mandarin'
+      'ma': 'Mandarin',
+      'ja': 'Japanese',
+      'hi': 'Hindi'
     }
 
     const targetLanguage = languageNames[language_code] || language_code

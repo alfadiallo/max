@@ -55,6 +55,29 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (insertError) throw insertError
 
+    // Delete old speech files since we have a new version
+    // This ensures speech will be regenerated from the latest version
+    const { error: deleteSpeechError } = await supabase
+      .from('max_generated_speech')
+      .delete()
+      .eq('translation_id', translationId)
+
+    if (deleteSpeechError) {
+      console.error('Error deleting old speech files:', deleteSpeechError)
+      // Don't fail the save if speech deletion fails
+    }
+
+    // Auto-promote this new version to final
+    const { error: updateFinalError } = await supabase
+      .from('max_translations')
+      .update({ final_version_id: newVersion.id })
+      .eq('id', translationId)
+
+    if (updateFinalError) {
+      console.error('Error promoting version to final:', updateFinalError)
+      // Don't fail the save if final update fails
+    }
+
     return NextResponse.json({ success: true, data: newVersion }, { status: 201 })
 
   } catch (error: any) {
@@ -94,4 +117,5 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     )
   }
 }
+
 

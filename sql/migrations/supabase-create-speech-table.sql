@@ -97,3 +97,4 @@ COMMENT ON COLUMN max_generated_speech.voice_type IS 'Type of voice: generic (st
 COMMENT ON COLUMN max_generated_speech.speech_source IS 'Source text: original_text (from translation) or edited_text (from version)';
 COMMENT ON COLUMN max_generated_speech.generation_settings IS 'JSON with ElevenLabs API settings: stability, similarity, style, use_speaker_boost, etc.';
 
+

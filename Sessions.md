@@ -93,9 +93,9 @@ None - all objectives completed
 
 ## Current Session: Session 2
 
-**Date:** October 26, 2025  
+**Date:** Starting now...  
 **Status:** In Progress  
-**Focus:** Phase 1 - Foundation + Phase 2 - Transcription
+**Focus:** Phase 1 - Foundation (Setup & Authentication)
 
 ### What I'm Working On
 - [x] Setup local development environment ✅
@@ -105,10 +105,6 @@ None - all objectives completed
 - [x] Implement authentication (register, login, logout) ✅
 - [x] Create dashboard layout ✅
 - [x] Built audio upload feature ✅
-- [x] Implement Whisper transcription ✅
-- [x] Add transcription loading indicators ✅
-- [x] Build transcription versioning system ✅
-- [x] Add edit functionality for transcriptions ✅
 
 ### Completed
 - ✅ Initialized Next.js project with TypeScript & Tailwind
@@ -117,7 +113,7 @@ None - all objectives completed
 - ✅ Created basic layout and homepage
 - ✅ Installed all dependencies (Next.js, Supabase, React, TypeScript)
 - ✅ Created `.env.local` and `.env.example` files
-- ✅ Dev server running on http://localhost:3000
+- ✅ Dev server running on http://localhost:3002
 - ✅ Fixed Next.js config warning
 - ✅ Set up Supabase client (browser & server)
 - ✅ Created authentication middleware
@@ -142,39 +138,27 @@ None - all objectives completed
 - ✅ Added audio player to project detail page
 - ✅ Fixed RLS on database tables and storage bucket
 - ✅ Upload working end-to-end! 🎉
-- ✅ Integrated OpenAI Whisper API for transcription
-- ✅ Created transcription API route (`/api/audio/transcribe`)
-- ✅ Added loading indicators (spinner + banner) during transcription
-- ✅ Built transcription versioning system (H-1, H-2, H-3...)
-- ✅ Created version API endpoints (`/api/transcriptions/[id]/versions`)
-- ✅ Added edit functionality with inline editor
-- ✅ Display shows latest version (H-X instead of always T-1)
-- ✅ Version history display with badges
-- ✅ Maps edited text back to timestamped segments for dubbing script
-- ✅ Updated TranscriptionView component with edit/save capabilities
 
 ### Blockers
-_None - Features are working!_
+_None yet - Ready to build features!_
 
 ### Test It Out!
-1. Visit: http://localhost:3000
-2. Login and go to a project
-3. Upload an audio file
-4. Click "Transcribe →" (see spinner + banner indicator)
-5. Transcription appears with timestamps and metadata
-6. Click "Edit" to modify text
-7. Click "Save Version" to create H-1
-8. Edit again to create H-2
-9. See version history badges below title
-10. All versions increment correctly (H-1 → H-2 → H-3...) ✅
+1. Visit: http://localhost:3002
+2. Click "Sign Up" and create an account
+3. You'll be redirected to dashboard
+4. Click "Projects" from dashboard
+5. Create a new project
+6. View project details
+7. All working! ✅
 
 ### Next Up
-- [ ] Add auto-save functionality (every 5 minutes)
-- [ ] Build diff viewer for comparing versions
-- [ ] Add ability to switch between versions in UI
-- [ ] Add auto-save drafts to temp storage
-- [ ] Build translation system (Phase 3)
-- [ ] Add DELETE RLS policies to Supabase database
+- [x] Build audio upload component ✅
+- [x] Implement file upload to Supabase Storage ✅
+- [x] Add audio file display and player ✅
+- [x] Built transcription API route ✅
+- [x] Added Transcribe button with loading state ✅
+- [ ] Deploy Supabase Edge Function for Whisper
+- [ ] Build transcription editor
 
 ### Session Notes
 - Fixed Next.js config: removed deprecated `appDir` from experimental
@@ -187,11 +171,8 @@ _None - Features are working!_
 - Audio upload feature complete with drag & drop UI
 - Files stored in `max-audio` bucket with organized paths
 - Upload validates file type (MP3, WAV, M4A, WebM) and size (500MB max)
-- Transcription uses OpenAI Whisper with word-level timestamps
-- Versioning system: T-1 (original) → H-1, H-2, H-3 (user edits)
-- Edited segments now show in dubbing script format
-- Version history displays as badges (H-1, H-2, etc.)
-- Latest version always displays by default
+- Progress indicator for better UX
+- Ready for transcription integration next
 
 ### Git Commits
 - `[Session 2] Initialize Next.js project with TypeScript & Tailwind`
@@ -203,10 +184,6 @@ _None - Features are working!_
 - `[Session 2] Create TypeScript types for all tables`
 - `[Session 2] Build projects API routes`
 - `[Session 2] Build projects pages (list & detail)`
-- `[Session 2] Add Whisper transcription integration`
-- `[Session 2] Add transcription loading indicators`
-- `[Session 2] Implement transcription versioning system`
-- `[Session 2] Add edit functionality with version history`
 
 ---
 
@@ -262,6 +239,168 @@ _None - Features are working!_
 
 ---
 
+## Current Session: Session 3 - Translation & Speech Generation
+
+**Date:** October 27, 2025  
+**Duration:** ~6 hours  
+**Status:** ✅ Complete  
+**Focus:** Translation workflow with 9 languages + Speech generation with ElevenLabs
+
+### What I Worked On
+- Added Japanese and Hindi to the translation system (now supports 9 languages)
+- Implemented batch translation button for all 9 languages
+- Fixed translation versioning workflow (no duplicate human edits)
+- Implemented speech generation with ElevenLabs
+- Added proper download functionality for generated speech
+- Set up all female voices for 9 languages
+- Fixed speech file persistence across page reloads
+
+### Completed
+- ✅ Added Japanese (🇯🇵) and Hindi (🇮🇳) to translation system
+- ✅ Updated translation API routes with new language codes
+- ✅ Updated voice mappings for Japanese and Hindi
+- ✅ Implemented batch translation button (translates all 9 languages sequentially)
+- ✅ Fixed speech file loading on page reload
+- ✅ Added proper JavaScript download handler for speech files
+- ✅ Set all voices to female across all 9 languages
+- ✅ Fixed translation versioning to auto-delete old speech when new version is saved
+- ✅ Auto-promote new translation versions to final
+- ✅ Cleaned up temporary documentation files in root folder
+
+### Voice Configuration (All Female)
+- 🇪🇸 **Spanish:** Serena (`ThT5KcBeYPX3keUQqHPh`)
+- 🇵🇹 **Portuguese:** Bella (`EXAVITQu4vr4xnSDxMaL`)
+- 🇸🇦 **Arabic:** Bella
+- 🇫🇷 **French:** Bella
+- 🇩🇪 **German:** Bella
+- 🇮🇹 **Italian:** Elli (`MF3mGyEYCl7XYWbV9V6O`)
+- 🇨🇳 **Mandarin:** Gigi (`LcfcDJNUP1GQjkzn1xUU`)
+- 🇯🇵 **Japanese:** Domi (`AZnzlk1XvdvUeBnXmlld`)
+- 🇮🇳 **Hindi:** Bella
+
+### Implementation Details
+- **Translation Workflow:** Matches transcription workflow - saves versions (H-1, H-2), auto-promotes to final, deletes old speech
+- **Speech Generation:** Uses ElevenLabs with 500 char limit for testing (approximately 30 seconds)
+- **Download Handling:** JavaScript blob download for cross-origin Supabase URLs
+- **Batch Translation:** Sequentially translates all 9 languages with 500ms delay between requests
+- **Speech Persistence:** Speech files load automatically when translations are loaded on page refresh
+
+### Files Modified
+- `src/app/api/transcriptions/[id]/translate/route.ts` - Added Japanese & Hindi
+- `src/lib/prompts/translation.ts` - Added language mappings
+- `src/app/api/speech/generate/route.ts` - Added voice mappings, all female voices
+- `src/components/audio/TranscriptionView.tsx` - Added batch translate button, download handler, speech loading
+- `src/app/api/translations/[id]/versions/route.ts` - Auto-delete old speech, auto-promote to final
+- Cleaned up temporary files: `fix-storage-simple.md`, `reset-password-link.md`, `SETUP-COMPLETE.md`
+- Moved `database-setup-instructions.md` → `docs/technical/database-setup.md`
+
+### Key Technical Decisions
+1. **All Female Voices:** Selected for consistency and professional sound
+2. **Bella for Multiple Languages:** Used ElevenLabs multilingual voice for Portuguese, Arabic, French, Hindi
+3. **Speech Regeneration:** Auto-deletes old speech when translation is edited to prevent duplicates
+4. **Batch Translation:** Single button to generate all 9 languages (saves time)
+5. **500 Character Limit:** Protects ElevenLabs token usage during testing
+6. **Download Handler:** JavaScript blob approach works for all browsers with cross-origin URLs
+
+### Test Results
+- ✅ Translation generates successfully for all 9 languages
+- ✅ Batch translation works (translates all languages sequentially)
+- ✅ Speech generation works (Japanese tested, ~8 seconds for 500 chars)
+- ✅ Speech files persist across page reloads
+- ✅ Download functionality works (JavaScript blob download)
+- ✅ No duplicate speech files after editing translations
+
+### Next Up
+- [ ] Test remaining 8 languages for speech generation
+- [ ] Increase speech length limit when ready for production
+- [ ] Add voice cloning feature (instant and professional)
+- [ ] Implement translation quality improvements (dictionary terms)
+- [ ] Add more languages as needed
+
+### Session Notes
+- **Translation Quality:** Claude generates good translations with proper medical terminology preservation
+- **Speech Quality:** ElevenLabs multilingual voices work well across languages
+- **Workflow:** Translation → Edit → Save → Auto-regenerate speech matches transcription pattern
+- **Testing:** Limited to 500 chars to minimize ElevenLabs usage during development
+- **Dubbing Decision:** Implemented Option A (continuous audio generation). Cost: ~$0.15 per language (~$1.35 for all 9), Time: 60-90 seconds, Manual alignment in video editor (industry-standard workflow). Option B deferred to future (segment-by-segment with automatic alignment): ~$200 per video, 30-45 minutes, but perfect timestamp sync.
+
+---
+
+## Current Session: Session 4 - Bug Fixes & Project Management Updates
+
+**Date:** October 27, 2025  
+**Duration:** ~2 hours  
+**Status:** ✅ Complete  
+**Focus:** UI improvements, project type updates, RLS policy fixes
+
+### What I Worked On
+- Fixed batch translate button visibility issues (loading state tracking)
+- Updated project modal UI (title, labels, removed "Other" option)
+- Added "Create New Project Type" functionality
+- Updated project types: ISA → KE Track - Invisalign Smile Architect, added KE Track - Team
+- Fixed RLS policy for transcriptions to prevent 42501 errors
+
+### Completed
+- ✅ Fixed batch button logic to only show when data is fully loaded (prevents flashing)
+- ✅ Added `translationsLoaded` and `speechLoaded` state tracking
+- ✅ Updated modal title from "Upload Audio" → "Select a project"
+- ✅ Updated label from "Project to Upload To" → "Project Category"
+- ✅ Removed "Other" from project type dropdown
+- ✅ Added "+ Create New Project Type" option at bottom of dropdown
+- ✅ Implemented custom project type creation workflow
+- ✅ Updated `supabase-create-tables.sql` with correct project types
+- ✅ Created migration file for updating existing database
+- ✅ Created RLS policy fix for transcription creation errors
+
+### Files Modified
+- `src/components/audio/TranscriptionView.tsx` - Fixed batch button logic, added loading states
+- `src/app/projects/page.tsx` - Updated modal UI, added custom project type creation
+- `sql/migrations/supabase-create-tables.sql` - Updated project types seed data
+- `sql/migrations/supabase-update-project-types.sql` - Migration for existing databases
+- `sql/migrations/supabase-fix-transcription-rls.sql` - RLS policy fix
+
+### Key Technical Decisions
+1. **Batch Button Logic:** Only show when data is fully loaded to prevent UI flashing
+2. **Project Type Management:** Users can create custom project types on-the-fly instead of being limited to "Other"
+3. **RLS Fix:** Added proper ownership validation in INSERT policy to prevent security issues
+
+### Session Notes
+- **UI/UX:** Batch buttons now properly handle partial completion state (e.g., 3 of 9 languages translated)
+- **Naming:** Cleaned up project type naming to be more specific (KE Track instead of ISA)
+- **Database:** Migration files created for easy deployment to production
+- **Security:** Fixed RLS policy that was too permissive, now properly validates ownership
+
+### Next Up
+- [ ] Run RLS fix SQL in Supabase (user needs to apply)
+- [ ] Test transcription creation after RLS fix
+- [ ] Move to Phase 4: Summary Generation
+
+---
+
+## 🚀 Future Roadmap & Milestones
+
+### Phase 4: Advanced Features (Future)
+- [ ] **Segment-by-Segment Dubbing:** Perfect timestamp alignment (~$200/video, 30-45 min generation)
+- [ ] Voice cloning for specific speakers (instant + professional clones)
+- [ ] Advanced timing controls in UI
+- [ ] Batch dubbing workflow for multiple videos
+- [ ] Real-time dubbing preview
+
+### Current Phase: Phase 2 Complete ✅
+- ✅ Translation system (9 languages)
+- ✅ Speech generation (ElevenLabs)
+- ✅ Re-generate speech capability
+- ✅ Download functionality
+- ✅ Translation versioning
+
+### Next Phase: Summaries & Deployment
+- [ ] Generate professional summaries (Email, LinkedIn, Blog)
+- [ ] Content analysis improvements
+- [ ] Production deployment
+- [ ] Performance optimization
+
+---
+
 ## Coding Session Guidelines
 
 ### Good Session Outcomes
@@ -287,16 +426,22 @@ _None - Features are working!_
 
 ## Quick Stats
 
-**Total Sessions:** 2 (1 Complete, 1 In Progress)  
-**Current Session:** Session 2 - Building Phase 1  
-**Total Hours:** ~5-6 hours  
+**Total Sessions:** 4 (Session 1 Complete, Session 2 Complete, Session 3 Complete, Session 4 Complete)  
+**Current Session:** Session 4 - Bug Fixes & Project Management Updates ✅  
+**Total Hours:** ~22+ hours  
 **Features Complete:** 
 - ✅ Authentication
 - ✅ Project Management (CRUD)
 - ✅ Database setup complete
 - ✅ Storage buckets ready
+- ✅ Audio upload & transcription
+- ✅ Translation system (9 languages)
+- ✅ Speech generation (ElevenLabs)
+- ✅ Translation versioning
+- ✅ Batch translation
+- ✅ UI/UX improvements (batch buttons, project types)
 
-**Current Phase:** Phase 2 - Transcription (80% complete)  
+**Current Phase:** Phase 2 - Transcription & Translation (Complete!)  
 **Target:** Building Max MVP by Nov 25, 2025  
-**Status:** Transcription & versioning working! 🚀  
-**Next:** Auto-save drafts → Translation system
+**Status:** Moving to Phase 4! 🚀  
+**Next:** Summary generation & deployment

@@ -110,3 +110,4 @@ TranscriptionTabs (main container with tabs)
 7. ⏳ Add "Send for Analysis" button
 8. ⏳ Display analysis results with badges/tags
 
+

@@ -6,7 +6,9 @@ export const TRANSLATION_USER_PROMPT = (originalText: string, targetLanguage: st
     'fr': 'French',
     'ge': 'German',
     'it': 'Italian',
-    'ma': 'Mandarin'
+    'ma': 'Mandarin',
+    'ja': 'Japanese',
+    'hi': 'Hindi'
   }
 
   const languageName = languageNames[languageCode] || targetLanguage

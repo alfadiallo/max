@@ -135,24 +135,70 @@ function CreateProjectModal({ projectTypes, onClose, onSuccess }: any) {
   const [name, setName] = useState('')
   const [projectTypeId, setProjectTypeId] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showOtherName, setShowOtherName] = useState(false)
+  const [showCustomInput, setShowCustomInput] = useState(false)
+  const [customProjectName, setCustomProjectName] = useState('')
   const supabase = createClient()
 
   const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const typeId = e.target.value
-    const selectedType = projectTypes.find((t: ProjectType) => t.id === typeId)
     
-    setProjectTypeId(typeId)
-    
-    if (selectedType) {
-      setShowOtherName(selectedType.slug === 'other')
-      // Auto-fill name from project type (unless "Other")
-      if (selectedType.slug !== 'other') {
+    if (typeId === 'custom') {
+      setShowCustomInput(true)
+      setProjectTypeId('')
+      setName('')
+    } else {
+      setShowCustomInput(false)
+      setProjectTypeId(typeId)
+      
+      const selectedType = projectTypes.find((t: ProjectType) => t.id === typeId)
+      if (selectedType) {
         setName(selectedType.name)
-      } else {
-        setName('')
       }
     }
+  }
+
+  const handleCustomProjectSubmit = async () => {
+    if (!customProjectName.trim()) {
+      alert('Please enter a project name')
+      return
+    }
+    
+    // Create a new project type
+    setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data: newType, error: typeError } = await supabase
+      .from('max_project_types')
+      .insert({
+        name: customProjectName,
+        slug: customProjectName.toLowerCase().replace(/\s+/g, '-'),
+        archived: false
+      })
+      .select()
+      .single()
+
+    if (typeError) {
+      alert(typeError.message)
+      setLoading(false)
+      return
+    }
+
+    // Create the project with the new type
+    const { error } = await supabase
+      .from('max_projects')
+      .insert({
+        name: customProjectName,
+        project_type_id: newType.id,
+        created_by: user.id
+      })
+
+    if (error) {
+      alert(error.message)
+    } else {
+      onSuccess()
+    }
+    setLoading(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -181,60 +227,88 @@ function CreateProjectModal({ projectTypes, onClose, onSuccess }: any) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4">Upload Audio</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Project to Upload To</label>
-            <select
-              required
-              value={projectTypeId}
-              onChange={handleTypeChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="">Select a project...</option>
-              {projectTypes.map((type: ProjectType) => (
-                <option key={type.id} value={type.id}>{type.name}</option>
-              ))}
-            </select>
-          </div>
-          
-          {showOtherName && (
+        <h2 className="text-xl font-bold mb-4">Select a project</h2>
+        
+        {!showCustomInput ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Project Category</label>
+              <select
+                required
+                value={projectTypeId}
+                onChange={handleTypeChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              >
+                <option value="">Select a project...</option>
+                {projectTypes
+                  .filter((type: ProjectType) => type.slug !== 'other')
+                  .map((type: ProjectType) => (
+                    <option key={type.id} value={type.id}>{type.name}</option>
+                  ))}
+                <option value="custom">+ Create New Project Type</option>
+              </select>
+            </div>
+            
+            {name && (
+              <div className="bg-gray-50 p-3 rounded">
+                <p className="text-sm text-gray-600">Project will be named:</p>
+                <p className="font-medium">{name}</p>
+              </div>
+            )}
+            
+            <div className="flex justify-end space-x-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-gray-700 hover:text-gray-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !projectTypeId}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">New Project Name</label>
               <input
                 type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={customProjectName}
+                onChange={(e) => setCustomProjectName(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="Enter project name"
+                autoFocus
               />
             </div>
-          )}
-          
-          {!showOtherName && name && (
-            <div className="bg-gray-50 p-3 rounded">
-              <p className="text-sm text-gray-600">New project will be named:</p>
-              <p className="font-medium">{name}</p>
+            
+            <div className="flex justify-end space-x-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCustomInput(false)
+                  setCustomProjectName('')
+                }}
+                className="px-4 py-2 text-gray-700 hover:text-gray-900"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={handleCustomProjectSubmit}
+                disabled={loading || !customProjectName.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? 'Creating...' : 'Create'}
+              </button>
             </div>
-          )}
-          <div className="flex justify-end space-x-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-gray-700 hover:text-gray-900"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? 'Creating...' : 'Next'}
-            </button>
           </div>
-        </form>
+        )}
       </div>
     </div>
   )

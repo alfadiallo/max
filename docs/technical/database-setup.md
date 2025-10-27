@@ -4,7 +4,7 @@
 
 1. Open your Supabase project dashboard
 2. Go to **SQL Editor**
-3. Open the file: `supabase-drop-contra-tables.sql`
+3. Open the file: `sql/migrations/supabase-drop-contra-tables.sql`
 4. Copy the entire contents
 5. Paste into SQL Editor
 6. Click **Run**
@@ -18,7 +18,7 @@
 ## Step 2: Create Max Tables
 
 1. In the same SQL Editor
-2. Open the file: `supabase-create-tables.sql`
+2. Open the file: `sql/migrations/supabase-create-tables.sql`
 3. Copy the entire contents
 4. Paste into SQL Editor
 5. Click **Run**
