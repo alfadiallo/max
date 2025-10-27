@@ -326,8 +326,14 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     // Match translation segments to original segments by timing
     let matchedSegments: any[] = []
     
-    if (translationSegments.length > 0 && translationSegments.length === originalSegments.length) {
-      // If we have segments that match in count, use them directly
+    // Check if segments are valid (not all empty or same repeated text)
+    const hasValidSegments = translationSegments.length > 0 && 
+      translationSegments.some((seg: any) => seg.text && seg.text.trim() !== '') &&
+      // Check if first segment text is different from second
+      (translationSegments.length === 1 || translationSegments[0].text !== translationSegments[1].text)
+    
+    if (hasValidSegments && translationSegments.length === originalSegments.length) {
+      // If we have valid segments that match in count, use them directly
       matchedSegments = originalSegments.map((originalSeg, idx) => {
         const matched = translationSegments[idx]
         return {
