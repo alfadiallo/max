@@ -45,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const prompt = ANALYSIS_USER_PROMPT(transcriptText)
     
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-3-5-sonnet-20240620',
       max_tokens: 2048,
       system: 'You are an expert content analyst. Return ONLY valid JSON with no additional text.',
       messages: [
@@ -101,8 +101,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   } catch (error: any) {
     console.error('Analysis error:', error)
+    console.error('Error details:', JSON.stringify(error, null, 2))
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to analyze transcription' },
+      { success: false, error: error.message || error.error?.message || JSON.stringify(error) || 'Failed to analyze transcription' },
       { status: 500 }
     )
   }
