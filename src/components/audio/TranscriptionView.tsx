@@ -324,21 +324,54 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     const translationSegments = translation.json_with_timestamps?.segments || []
     
     // Match translation segments to original segments by timing
-    const matchedSegments = originalSegments.map((originalSeg, idx) => {
-      // Find translation segment with matching or nearest timing
-      const matched = translationSegments.find((ts: any) => 
-        Math.abs(ts.start - originalSeg.start) < 0.5 && Math.abs(ts.end - originalSeg.end) < 0.5
-      ) || translationSegments[idx]
+    let matchedSegments: any[] = []
+    
+    if (translationSegments.length > 0 && translationSegments.length === originalSegments.length) {
+      // If we have segments that match in count, use them directly
+      matchedSegments = originalSegments.map((originalSeg, idx) => {
+        const matched = translationSegments[idx]
+        return {
+          id: originalSeg.id,
+          seek: originalSeg.seek,
+          start: originalSeg.start,
+          end: originalSeg.end,
+          text: matched?.text || '',
+          words: []
+        }
+      })
+    } else if (translation.translated_text && originalSegments.length > 0) {
+      // Fallback: split the full translation text evenly across segments
+      const translationWords = translation.translated_text.split(' ')
+      const totalEnglishWords = originalSegments.reduce((sum, seg) => sum + seg.text.split(' ').length, 0)
+      const wordRatio = translationWords.length / totalEnglishWords
       
-      return {
+      let currentWordIdx = 0
+      matchedSegments = originalSegments.map((originalSeg) => {
+        const segmentWordCount = originalSeg.text.split(' ').length
+        const translatedWordCount = Math.round(segmentWordCount * wordRatio)
+        const translatedWords = translationWords.slice(currentWordIdx, currentWordIdx + translatedWordCount)
+        currentWordIdx += translatedWordCount
+        
+        return {
+          id: originalSeg.id,
+          seek: originalSeg.seek,
+          start: originalSeg.start,
+          end: originalSeg.end,
+          text: translatedWords.join(' ') || '',
+          words: []
+        }
+      })
+    } else {
+      // Last fallback: empty segments
+      matchedSegments = originalSegments.map((originalSeg) => ({
         id: originalSeg.id,
         seek: originalSeg.seek,
         start: originalSeg.start,
         end: originalSeg.end,
-        text: matched?.text || '',
+        text: '',
         words: []
-      }
-    })
+      }))
+    }
     
     setEditedTranslationSegments(matchedSegments)
   }

@@ -128,33 +128,67 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const translatedText = content.text.trim()
 
     // Parse segmented translation (format: [start-end] text)
-    const translatedSegments: any[] = []
+    let translatedSegments: any[] = []
     const lines = translatedText.split('\n').filter(line => line.trim())
     
-    lines.forEach((line, idx) => {
+    let parsedCount = 0
+    lines.forEach((line) => {
       const timestampMatch = line.match(/\[(\d+\.?\d*)-(\d+\.?\d*)\]\s*(.*)/)
       if (timestampMatch) {
         const [, start, end, text] = timestampMatch
         translatedSegments.push({
-          id: segments[idx]?.id || idx,
-          seek: segments[idx]?.seek || idx * 1000,
+          id: segments[parsedCount]?.id || parsedCount,
+          seek: segments[parsedCount]?.seek || parsedCount * 1000,
           start: parseFloat(start),
           end: parseFloat(end),
           text: text.trim(),
           words: []
         })
-      } else if (idx < segments.length) {
-        // Fallback: use original segment timing
-        translatedSegments.push({
-          id: segments[idx].id,
-          seek: segments[idx].seek,
-          start: segments[idx].start,
-          end: segments[idx].end,
-          text: line.trim(),
-          words: []
-        })
+        parsedCount++
       }
     })
+
+    // If parsing failed or not enough segments, fall back to splitting by English segments
+    if (translatedSegments.length !== segments.length) {
+      // Split translation into approximately equal parts based on English segments
+      const englishWords = segments.map(seg => seg.text).join(' ').split(' ')
+      const translationWords = translatedText.split(' ')
+      const wordRatio = translationWords.length / englishWords.length
+      
+      translatedSegments = segments.map((seg, idx) => {
+        // Try to find corresponding translation segment
+        const existingSegment = translatedSegments.find(ts => 
+          Math.abs(ts.start - seg.start) < 0.5 && Math.abs(ts.end - seg.end) < 0.5
+        )
+        
+        if (existingSegment) {
+          return existingSegment
+        }
+        
+        // If no match, try to extract from full text based on word counts
+        const segmentWords = seg.text.split(' ')
+        const segmentWordCount = segmentWords.length
+        const startWordIdx = segments.slice(0, idx).reduce((sum, s) => sum + s.text.split(' ').length, 0)
+        const endWordIdx = startWordIdx + segmentWordCount
+        
+        const translatedTextPortion = translationWords.slice(
+          Math.floor(startWordIdx * wordRatio),
+          Math.floor(endWordIdx * wordRatio)
+        ).join(' ')
+        
+        return {
+          id: seg.id,
+          seek: seg.seek,
+          start: seg.start,
+          end: seg.end,
+          text: translatedTextPortion || translationWords.slice(
+            Math.floor(idx * wordRatio),
+            Math.floor((idx + 1) * wordRatio)
+          ).join(' '),
+          words: []
+        }
+      })
+    }
 
     // Build full text from segments
     const fullTranslatedText = translatedSegments.map(seg => seg.text).join(' ')
