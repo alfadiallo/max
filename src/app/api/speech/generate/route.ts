@@ -253,7 +253,9 @@ export async function POST(req: NextRequest) {
         const { data: newSpeech, error: insertError } = await supabase
           .from('max_generated_speech')
           .insert({
+            transcription_id: translation.transcription_id,
             translation_id: translation_id,
+            translation_version_id: translation.final_version_id || null,
             language_code: language_code,
             audio_url: urlData.publicUrl,
             audio_duration_seconds: estimatedDuration,
