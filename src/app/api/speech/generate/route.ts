@@ -228,6 +228,24 @@ export async function POST(req: NextRequest) {
       console.log('translation_id:', translation_id)
       console.log('translation.transcription_id:', translation.transcription_id)
       
+      // Prepare insert payload
+      const insertPayload = {
+        transcription_id: translation.transcription_id,
+        translation_id: translation_id,
+        translation_version_id: translation.final_version_id || null,
+        language_code: language_code,
+        audio_url: urlData.publicUrl,
+        audio_duration_seconds: estimatedDuration,
+        audio_file_size_bytes: audioBuffer.length,
+        status: 'completed',
+        voice_id: voiceId,
+        voice_type: 'generic',
+        speech_source: translation.final_version_id ? 'edited_text' : 'original_text',
+        created_by: user.id
+      }
+      
+      console.log('Insert payload:', JSON.stringify(insertPayload, null, 2))
+      
       if (existingSpeech) {
         // Update existing record
         const { data: updatedSpeech, error: updateError } = await supabase
@@ -254,22 +272,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, data: updatedSpeech }, { status: 200 })
       } else {
         // Create new record
+        console.log('Attempting database insert with payload:', insertPayload)
         const { data: newSpeech, error: insertError } = await supabase
           .from('max_generated_speech')
-          .insert({
-            transcription_id: translation.transcription_id,
-            translation_id: translation_id,
-            translation_version_id: translation.final_version_id || null,
-            language_code: language_code,
-            audio_url: urlData.publicUrl,
-            audio_duration_seconds: estimatedDuration,
-            audio_file_size_bytes: audioBuffer.length,
-            status: 'completed',
-            voice_id: voiceId,
-            voice_type: 'generic',
-            speech_source: translation.final_version_id ? 'edited_text' : 'original_text',
-            created_by: user.id
-          })
+          .insert(insertPayload)
           .select()
           .single()
 
