@@ -8,6 +8,7 @@ interface Transcription {
   raw_text: string
   transcription_type: string
   created_at: string
+  final_version_id?: string | null
   versions?: Array<{
     id: string
     version_number: number
@@ -84,6 +85,20 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       
       if (result.success) {
         setTranscriptions(result.data || [])
+        // Load the final version if it exists
+        if (result.data && result.data.length > 0) {
+          const transcription = result.data[0]
+          // final_version_id: string = a version is final, null = T-1 is final, undefined = no final
+          if (transcription.final_version_id !== undefined) {
+            if (transcription.final_version_id === null) {
+              // null means T-1 is the final version
+              setFinalVersion(`t1-${transcription.id}`)
+            } else {
+              // A version ID means that version is final
+              setFinalVersion(transcription.final_version_id)
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading transcriptions:', error)
@@ -177,9 +192,32 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     setEditedText('')
   }
 
-  const handlePromoteToFinal = (versionId: string) => {
-    setFinalVersion(versionId)
-    setActiveTab('final')
+  const handlePromoteToFinal = async (versionId: string) => {
+    try {
+      // Save to database
+      if (transcriptions.length > 0) {
+        const transcription = transcriptions[0]
+        // Check if this is T-1 (starts with 't1-')
+        const versionIdToSave = versionId.startsWith('t1-') ? null : versionId
+        
+        const response = await fetch(`/api/transcriptions/${transcription.id}/final`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version_id: versionIdToSave })
+        })
+        
+        const result = await response.json()
+        if (result.success) {
+          setFinalVersion(versionId)
+          setActiveTab('final')
+        } else {
+          alert(`Failed to promote to final: ${result.error}`)
+        }
+      }
+    } catch (error: any) {
+      console.error('Error promoting to final:', error)
+      alert(`Error: ${error.message}`)
+    }
   }
 
   const handleAnalyze = async (transcriptionId: string) => {
