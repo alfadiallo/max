@@ -100,7 +100,8 @@ export async function POST(req: NextRequest) {
 
     // Generate speech using ElevenLabs
     console.log('Calling ElevenLabs API...')
-    let audioStream: ReadableStream<Uint8Array>
+    let audioStream: ReadableStream<Uint8Array> | null = null
+    
     try {
       const response = await elevenlabsClient.textToSpeech.convert(voiceId, {
         text: textToSynthesize,
@@ -112,18 +113,34 @@ export async function POST(req: NextRequest) {
           use_speaker_boost: true
         }
       })
-      console.log('Received response from ElevenLabs')
-      console.log('Response type:', typeof response)
-      console.log('Response keys:', Object.keys(response || {}))
-      console.log('Response.body:', response.body)
-      console.log('Response.ok:', response.ok)
-      console.log('Response.status:', response.status)
       
-      // The response IS the stream
-      audioStream = response as any as ReadableStream<Uint8Array>
-      console.log('Extracted audio stream')
+      console.log('Received response from ElevenLabs')
+      console.log('Response:', response)
+      
+      // Access the body stream from the response
+      audioStream = response.body as ReadableStream<Uint8Array>
+      console.log('Extracted audio stream from response.body')
+      
+      if (!audioStream) {
+        throw new Error('No audio stream returned from ElevenLabs')
+      }
     } catch (apiError: any) {
       console.error('ElevenLabs API error:', apiError)
+      
+      // Handle quota exceeded error
+      if (apiError?.body?.detail?.status === 'quota_exceeded') {
+        const message = apiError.body.detail.message
+        console.error('ElevenLabs quota exceeded:', message)
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: `ElevenLabs quota exceeded: ${message}`,
+            quotaError: true
+          }, 
+          { status: 402 }
+        )
+      }
+      
       console.error('Error type:', typeof apiError)
       console.error('Error keys:', Object.keys(apiError || {}))
       console.error('Error message:', apiError?.message)
@@ -133,6 +150,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Convert stream to buffer
+    if (!audioStream) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to get audio stream from ElevenLabs' },
+        { status: 500 }
+      )
+    }
+
     console.log('Converting stream to buffer...')
     const chunks: Uint8Array[] = []
     const reader = audioStream.getReader()
