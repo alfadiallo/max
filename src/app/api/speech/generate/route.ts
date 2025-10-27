@@ -274,11 +274,14 @@ export async function POST(req: NextRequest) {
           .single()
 
         if (insertError) {
-          console.error('Database insert error:', insertError)
-          console.error('Insert error code:', insertError.code)
-          console.error('Insert error message:', insertError.message)
-          console.error('Insert error details:', insertError.details)
-          console.error('Insert error hint:', insertError.hint)
+          console.error('Database insert error object:', insertError)
+          console.error('Insert error type:', typeof insertError)
+          console.error('Insert error keys:', Object.keys(insertError || {}))
+          console.error('Insert error code:', insertError?.code)
+          console.error('Insert error message:', insertError?.message)
+          console.error('Insert error details:', insertError?.details)
+          console.error('Insert error hint:', insertError?.hint)
+          console.error('Full error JSON:', JSON.stringify(insertError, Object.getOwnPropertyNames(insertError), 2))
           throw insertError
         }
 
@@ -286,11 +289,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, data: newSpeech }, { status: 201 })
       }
     } catch (uploadError: any) {
-      console.error('Upload or database error:', uploadError)
-      console.error('Error message:', uploadError.message)
-      console.error('Error stack:', uploadError.stack)
+      console.error('Upload or database error type:', typeof uploadError)
+      console.error('Upload or database error keys:', Object.keys(uploadError || {}))
+      console.error('Upload or database error object:', uploadError)
+      console.error('Upload or database error as string:', String(uploadError))
+      console.error('Error message:', uploadError?.message)
+      console.error('Error stack:', uploadError?.stack)
+      console.error('Full error JSON:', JSON.stringify(uploadError, Object.getOwnPropertyNames(uploadError), 2))
       return NextResponse.json(
-        { success: false, error: uploadError.message || 'Failed to save audio' },
+        { success: false, error: uploadError?.message || 'Failed to save audio' },
         { status: 500 }
       )
     }
