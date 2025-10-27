@@ -71,9 +71,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, data: existingSpeech }, { status: 200 })
     }
 
+    // Check API key
+    const apiKey = process.env.ELEVENLABS_API_KEY || ''
+    if (!apiKey) {
+      console.error('ELEVENLABS_API_KEY not found in environment')
+      return NextResponse.json({ success: false, error: 'ElevenLabs API key not configured' }, { status: 500 })
+    }
+
     // Initialize ElevenLabs client
+    console.log('Initializing ElevenLabs client...')
     const elevenlabsClient = new ElevenLabsClient({
-      apiKey: process.env.ELEVENLABS_API_KEY || ''
+      apiKey: apiKey
     })
 
     // Voice mapping for each language
@@ -88,30 +96,54 @@ export async function POST(req: NextRequest) {
     }
 
     const voiceId = voiceMap[language_code] || 'pNInz6obpgDQGcFmaJgB' // Default to Adam
+    console.log('Voice ID:', voiceId, 'Text length:', textToSynthesize.length)
 
     // Generate speech using ElevenLabs
-    const audioStream = await elevenlabsClient.textToSpeech.convert(voiceId, {
-      text: textToSynthesize,
-      model_id: 'eleven_multilingual_v2',
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.5,
-        style: 0.0,
-        use_speaker_boost: true
-      }
-    })
+    console.log('Calling ElevenLabs API...')
+    let audioStream: ReadableStream<Uint8Array>
+    try {
+      const response = await elevenlabsClient.textToSpeech.convert(voiceId, {
+        text: textToSynthesize,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.5,
+          style: 0.0,
+          use_speaker_boost: true
+        }
+      })
+      console.log('Received response from ElevenLabs')
+      audioStream = response.body as ReadableStream<Uint8Array>
+      console.log('Extracted audio stream')
+    } catch (apiError: any) {
+      console.error('ElevenLabs API error:', apiError)
+      console.error('Error type:', typeof apiError)
+      console.error('Error keys:', Object.keys(apiError || {}))
+      console.error('Error message:', apiError?.message)
+      console.error('Error status:', apiError?.status)
+      console.error('Error response:', apiError?.response)
+      throw apiError
+    }
 
     // Convert stream to buffer
+    console.log('Converting stream to buffer...')
     const chunks: Uint8Array[] = []
     const reader = audioStream.getReader()
     
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value) chunks.push(value)
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (value) chunks.push(value)
+      }
+      console.log('Read', chunks.length, 'chunks from stream')
+    } catch (streamError: any) {
+      console.error('Stream reading error:', streamError)
+      throw streamError
     }
     
     const audioBuffer = Buffer.concat(chunks.map(chunk => Buffer.from(chunk)))
+    console.log('Audio buffer size:', audioBuffer.length, 'bytes')
 
     // Upload to Supabase Storage
     const fileName = `speech_${language_code}_${translation_id}_${Date.now()}.mp3`
