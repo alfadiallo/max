@@ -273,6 +273,15 @@ export async function POST(req: NextRequest) {
       } else {
         // Create new record
         console.log('Attempting database insert with payload:', insertPayload)
+        
+        // Debug: Try to query the table to see if it exists
+        const { data: testQuery, error: testError } = await supabase
+          .from('max_generated_speech')
+          .select('id')
+          .limit(1)
+        
+        console.log('Test query result - table exists:', !testError, 'Error:', testError)
+        
         const { data: newSpeech, error: insertError } = await supabase
           .from('max_generated_speech')
           .insert(insertPayload)
