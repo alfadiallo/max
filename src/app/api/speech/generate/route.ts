@@ -224,6 +224,10 @@ export async function POST(req: NextRequest) {
 
       // Save to database
       console.log('Saving to database...')
+      console.log('Translation object:', JSON.stringify(translation, null, 2))
+      console.log('translation_id:', translation_id)
+      console.log('translation.transcription_id:', translation.transcription_id)
+      
       if (existingSpeech) {
         // Update existing record
         const { data: updatedSpeech, error: updateError } = await supabase
@@ -271,6 +275,10 @@ export async function POST(req: NextRequest) {
 
         if (insertError) {
           console.error('Database insert error:', insertError)
+          console.error('Insert error code:', insertError.code)
+          console.error('Insert error message:', insertError.message)
+          console.error('Insert error details:', insertError.details)
+          console.error('Insert error hint:', insertError.hint)
           throw insertError
         }
 
