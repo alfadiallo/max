@@ -85,8 +85,28 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const targetLanguage = languageNames[language_code] || language_code
 
+    // Get dictionary terms for this language
+    const { data: dictionaryTerms } = await supabase
+      .from('max_dictionary')
+      .select('term_original, term_corrected')
+      .eq('language_code', language_code)
+      .order('usage_count', { ascending: false })
+      .limit(50)
+
+    // Build dictionary context
+    let dictionaryContext = ''
+    if (dictionaryTerms && dictionaryTerms.length > 0) {
+      dictionaryContext = '\n\nIMPORTANT: Use these specific translations from our dictionary:\n'
+      dictionaryTerms.forEach((term) => {
+        dictionaryContext += `- "${term.term_original}" → "${term.term_corrected}"\n`
+      })
+    }
+
     // Call Claude for translation
-    const prompt = TRANSLATION_USER_PROMPT(sourceText, targetLanguage, language_code)
+    let prompt = TRANSLATION_USER_PROMPT(sourceText, targetLanguage, language_code)
+    if (dictionaryContext) {
+      prompt += dictionaryContext
+    }
     
     const message = await anthropic.messages.create({
       model: 'claude-3-5-sonnet-20240620',

@@ -298,9 +298,19 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     }
   }
 
-  const handleEditTranslation = (translation: any) => {
+  const handleEditTranslation = async (translation: any) => {
     setEditingTranslation(translation.id)
     setEditedTranslationText(translation.translated_text)
+    
+    // Load original English transcription for split view
+    if (transcriptions.length > 0) {
+      const transcription = transcriptions[0]
+      // Get final version text for comparison
+      if (transcription.final_version_id !== undefined) {
+        // We'll use this to display side-by-side
+        console.log('Loading original for comparison')
+      }
+    }
   }
 
   const handleSaveTranslationVersion = async (translationId: string) => {
@@ -312,6 +322,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       // Get original segments for timestamp preservation
       const segments = originalTranslation.json_with_timestamps?.segments || []
 
+      // Save the translation version
       const response = await fetch(`/api/translations/${translationId}/versions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -327,7 +338,44 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       })
 
       const result = await response.json()
+      
       if (result.success) {
+        // Extract dictionary terms if text was significantly changed
+        if (transcriptions.length > 0) {
+          const transcription = transcriptions[0]
+          
+          try {
+            // Get original English text
+            let originalEnglishText = ''
+            if (transcription.final_version_id !== undefined) {
+              if (transcription.final_version_id === null) {
+                originalEnglishText = transcription.raw_text
+              } else {
+                const finalVersion = transcription.versions?.find((v: any) => v.id === transcription.final_version_id)
+                if (finalVersion) originalEnglishText = finalVersion.edited_text
+              }
+            }
+            
+            // Store dictionary terms (simplified - store full texts for now)
+            // In production, extract specific word/phrase pairs
+            if (originalEnglishText && editedTranslationText !== originalTranslation.translated_text) {
+              await fetch('/api/translations/extract-dictionary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  original_text: originalTranslation.translated_text.substring(0, 500),
+                  edited_text: editedTranslationText.substring(0, 500),
+                  language_code: originalTranslation.language_code,
+                  transcription_id: transcription.id
+                })
+              })
+            }
+          } catch (dictError) {
+            console.error('Error extracting dictionary terms:', dictError)
+            // Don't fail the save operation if dictionary extraction fails
+          }
+        }
+        
         loadTranslations() // Reload to show new version
         setEditingTranslation(null)
         setEditedTranslationText('')
@@ -976,35 +1024,105 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
             </div>
           )}
 
-          {/* Translation Edit Modal */}
-          {editingTranslation && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white p-6 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-                <h3 className="text-lg font-semibold mb-4">Edit Translation</h3>
-                <textarea
-                  value={editedTranslationText}
-                  onChange={(e) => setEditedTranslationText(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded h-64 mb-4"
-                  placeholder="Translation text..."
-                />
-                <div className="flex gap-3 justify-end">
-                  <button
-                    onClick={handleCancelEditTranslation}
-                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => handleSaveTranslationVersion(editingTranslation)}
-                    disabled={savingTranslation}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {savingTranslation ? 'Saving...' : 'Save Version'}
-                  </button>
+          {/* Translation Edit Modal - Split View */}
+          {editingTranslation && (() => {
+            const translation = translations.find((t: any) => t.id === editingTranslation)
+            if (!translation) return null
+            
+            // Get original English text from final version
+            let originalEnglishText = ''
+            let originalSegments: any[] = []
+            
+            if (transcriptions.length > 0) {
+              const transcription = transcriptions[0]
+              if (transcription.final_version_id !== undefined) {
+                if (transcription.final_version_id === null) {
+                  // T-1 is final
+                  originalEnglishText = transcription.raw_text
+                  originalSegments = transcription.json_with_timestamps?.segments || []
+                } else {
+                  // A version is final
+                  const finalVersion = transcription.versions?.find((v: any) => v.id === transcription.final_version_id)
+                  if (finalVersion) {
+                    originalEnglishText = finalVersion.edited_text
+                    originalSegments = finalVersion.json_with_timestamps?.segments || []
+                  }
+                }
+              }
+            }
+            
+            return (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => {
+                if (e.target === e.currentTarget) handleCancelEditTranslation()
+              }}>
+                <div className="bg-white p-6 rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">Edit Translation - Side by Side View</h3>
+                    <button
+                      onClick={handleCancelEditTranslation}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  
+                  {/* Split View */}
+                  <div className="flex gap-4 flex-1 overflow-hidden">
+                    {/* Left: Original English */}
+                    <div className="flex-1 border-r border-gray-300 pr-4 overflow-y-auto">
+                      <h4 className="text-sm font-semibold text-gray-600 mb-2">English Original (Reference)</h4>
+                      {originalSegments.length > 0 ? (
+                        <div className="space-y-3">
+                          {originalSegments.map((seg: any, idx: number) => (
+                            <div key={idx} className="p-3 bg-gray-50 rounded border border-gray-200">
+                              <div className="text-xs text-gray-500 mb-1">
+                                {formatTime(seg.start)} - {formatTime(seg.end)}
+                              </div>
+                              <div className="text-sm leading-relaxed">{seg.text}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-gray-50 rounded text-sm text-gray-600">
+                          {originalEnglishText || 'No segments available'}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Right: Translated Version (Editable) */}
+                    <div className="flex-1 overflow-y-auto">
+                      <h4 className="text-sm font-semibold text-gray-600 mb-2">Translation (Editable)</h4>
+                      <textarea
+                        value={editedTranslationText}
+                        onChange={(e) => setEditedTranslationText(e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded h-[500px] font-sans text-sm"
+                        placeholder="Translation text..."
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 justify-end mt-4 pt-4 border-t border-gray-200">
+                    <button
+                      onClick={handleCancelEditTranslation}
+                      className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleSaveTranslationVersion(editingTranslation)}
+                      disabled={savingTranslation}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {savingTranslation ? 'Saving...' : 'Save Version'}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
         </div>
       )}
     </div>
