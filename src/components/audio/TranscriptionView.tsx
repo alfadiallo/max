@@ -276,113 +276,113 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                 <div className="space-y-2">
                   {transcriptions.map((transcription) => {
                     const metadata = transcription.json_with_timestamps?.metadata
-                
-                // Build all versions array: T-1 first, then H-1, H-2, etc. in order
-                const allVersions = [
-                  {
-                    id: `t1-${transcription.id}`,
-                    transcriptionId: transcription.id,
-                    type: transcription.transcription_type,
-                    text: transcription.raw_text,
-                    created_at: transcription.created_at,
-                    segments: transcription.json_with_timestamps?.segments || [],
-                    metadata: metadata,
-                    isLatest: false,
-                    canEdit: false
-                  },
-                  ...(transcription.versions || [])
-                    .sort((a, b) => a.version_number - b.version_number)
-                    .map((v) => ({
-                      id: v.id,
-                      transcriptionId: transcription.id,
-                      type: v.version_type,
-                      text: v.edited_text,
-                      created_at: v.created_at,
-                      segments: v.json_with_timestamps?.segments || transcription.json_with_timestamps?.segments || [],
-                      metadata: metadata,
-                      isLatest: false,
-                      canEdit: false
-                    }))
-                ]
-                
-                // Mark the latest version and reverse so most recent is first
-                if (allVersions.length > 0) {
-                  allVersions[allVersions.length - 1].isLatest = true
-                  allVersions[allVersions.length - 1].canEdit = true
-                }
-                
-                // Reverse array so latest (H-2, H-1, etc.) appears first
-                allVersions.reverse()
-                
-                // Helper functions for collapse/expand (first one is latest after reverse)
-                const latestVersionId = allVersions[0]?.id
-                const isExpanded = (versionId: string) => {
-                  if (expandedVersions.size === 0) {
-                    return versionId === latestVersionId
-                  }
-                  return expandedVersions.has(versionId)
-                }
-                
-                const toggleVersion = (versionId: string) => {
-                  const newExpanded = new Set(expandedVersions)
-                  if (newExpanded.has(versionId)) {
-                    newExpanded.delete(versionId)
-                  } else {
-                    newExpanded.add(versionId)
-                  }
-                  setExpandedVersions(newExpanded)
-                }
-                
-                return (
-                  <div key={transcription.id} className="space-y-2">
-                    {allVersions.map((version) => {
-                      const versionIsExpanded = isExpanded(version.id)
-                      const hasTimestamps = version.segments.length > 0
-                      const versionIsEditing = editingTranscription === version.id
-                      
-                      return (
-                        <div key={version.id} className="border border-gray-200 rounded-lg">
-                          {/* Version Header - Collapsible */}
-                          <button
-                            onClick={() => toggleVersion(version.id)}
-                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-lg">{versionIsExpanded ? '▼' : '▶'}</span>
-                              <div className="text-left">
-                                <p className="text-sm font-semibold">{version.type}</p>
-                                <p className="text-xs text-gray-500">{new Date(version.created_at).toLocaleString()}</p>
-                              </div>
-                            </div>
-                            {!versionIsEditing && hasTimestamps && (
-                              <span className="text-xs text-green-600 font-medium">🎬 Has timestamps</span>
-                            )}
-                          </button>
+                    
+                    // Build all versions array: T-1 first, then H-1, H-2, etc. in order
+                    const allVersions = [
+                      {
+                        id: `t1-${transcription.id}`,
+                        transcriptionId: transcription.id,
+                        type: transcription.transcription_type,
+                        text: transcription.raw_text,
+                        created_at: transcription.created_at,
+                        segments: transcription.json_with_timestamps?.segments || [],
+                        metadata: metadata,
+                        isLatest: false,
+                        canEdit: false
+                      },
+                      ...(transcription.versions || [])
+                        .sort((a, b) => a.version_number - b.version_number)
+                        .map((v) => ({
+                          id: v.id,
+                          transcriptionId: transcription.id,
+                          type: v.version_type,
+                          text: v.edited_text,
+                          created_at: v.created_at,
+                          segments: v.json_with_timestamps?.segments || transcription.json_with_timestamps?.segments || [],
+                          metadata: metadata,
+                          isLatest: false,
+                          canEdit: false
+                        }))
+                    ]
+                    
+                    // Mark the latest version and reverse so most recent is first
+                    if (allVersions.length > 0) {
+                      allVersions[allVersions.length - 1].isLatest = true
+                      allVersions[allVersions.length - 1].canEdit = true
+                    }
+                    
+                    // Reverse array so latest (H-2, H-1, etc.) appears first
+                    allVersions.reverse()
+                    
+                    // Helper functions for collapse/expand (first one is latest after reverse)
+                    const latestVersionId = allVersions[0]?.id
+                    const isExpanded = (versionId: string) => {
+                      if (expandedVersions.size === 0) {
+                        return versionId === latestVersionId
+                      }
+                      return expandedVersions.has(versionId)
+                    }
+                    
+                    const toggleVersion = (versionId: string) => {
+                      const newExpanded = new Set(expandedVersions)
+                      if (newExpanded.has(versionId)) {
+                        newExpanded.delete(versionId)
+                      } else {
+                        newExpanded.add(versionId)
+                      }
+                      setExpandedVersions(newExpanded)
+                    }
+                    
+                    return (
+                      <div key={transcription.id} className="space-y-2">
+                        {allVersions.map((version) => {
+                          const versionIsExpanded = isExpanded(version.id)
+                          const hasTimestamps = version.segments.length > 0
+                          const versionIsEditing = editingTranscription === version.id
                           
-                          {/* Version Content - Collapsed */}
-                          {versionIsExpanded && (
-                            <div className="px-4 pb-4 space-y-3">
-                              {/* Edit Button - only for latest version */}
-                              {version.canEdit && !versionIsEditing && (
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => handleEdit(version.transcriptionId, version.id)}
-                                    className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handlePromoteToFinal(version.id)}
-                                    className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
-                                  >
-                                    Promote to Final
-                                  </button>
+                          return (
+                            <div key={version.id} className="border border-gray-200 rounded-lg">
+                              {/* Version Header - Collapsible */}
+                              <button
+                                onClick={() => toggleVersion(version.id)}
+                                className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span className="text-lg">{versionIsExpanded ? '▼' : '▶'}</span>
+                                  <div className="text-left">
+                                    <p className="text-sm font-semibold">{version.type}</p>
+                                    <p className="text-xs text-gray-500">{new Date(version.created_at).toLocaleString()}</p>
+                                  </div>
                                 </div>
-                              )}
+                                {!versionIsEditing && hasTimestamps && (
+                                  <span className="text-xs text-green-600 font-medium">🎬 Has timestamps</span>
+                                )}
+                              </button>
                               
-                              {/* Metadata Box */}
-                              {version.metadata && (
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                              {/* Version Content - Collapsed */}
+                              {versionIsExpanded && (
+                                <div className="px-4 pb-4 space-y-3">
+                                  {/* Edit Button - only for latest version */}
+                                  {version.canEdit && !versionIsEditing && (
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => handleEdit(version.transcriptionId, version.id)}
+                                        className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => handlePromoteToFinal(version.id)}
+                                        className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                                      >
+                                        Promote to Final
+                                      </button>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Metadata Box */}
+                                  {version.metadata && (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
                                     {audioDuration !== null && audioDuration !== undefined && (
                                       <div>
