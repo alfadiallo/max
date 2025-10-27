@@ -5,6 +5,9 @@
 -- extraction, tagging, and pipeline status tracking
 -- =====================================================
 
+-- Enable pgvector extension for embeddings
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- 1. Insight Transcripts (Instructional Version)
 -- Cloned from canonical final version, editable for learning
 CREATE TABLE IF NOT EXISTS insight_transcripts (
@@ -155,6 +158,45 @@ CREATE INDEX idx_insight_outputs_transcription ON insight_content_outputs(transc
 CREATE INDEX idx_insight_outputs_type ON insight_content_outputs(output_type);
 CREATE INDEX idx_insight_outputs_status ON insight_content_outputs(status);
 
+-- 6. Insight Chunks (Searchable Segments)
+-- Chunks with embeddings for semantic search
+CREATE TABLE IF NOT EXISTS insight_chunks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  insight_transcript_id UUID NOT NULL REFERENCES insight_transcripts(id) ON DELETE CASCADE,
+  chunk_number INT NOT NULL,
+  
+  -- Timestamps
+  timestamp_start VARCHAR(10),      -- MM:SS format
+  timestamp_start_seconds INT,       -- 510 (for sorting)
+  timestamp_end VARCHAR(10),
+  timestamp_end_seconds INT,
+  duration_seconds INT,
+  
+  -- Content
+  text TEXT NOT NULL,
+  token_count INT,
+  
+  -- Metadata (denormalized for fast filtering)
+  procedures_mentioned TEXT[],       -- Array: ['direct_bonding', 'tissue_contouring']
+  tools_mentioned TEXT[],
+  concepts_mentioned TEXT[],
+  semantic_section VARCHAR(255),     -- "Tissue Contouring Technique"
+  
+  -- Embedding (vector)
+  embedding vector(1536),            -- OpenAI text-embedding-3-small (1536 dims)
+  
+  -- Audit
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_insight_chunks_transcript ON insight_chunks(insight_transcript_id);
+CREATE INDEX idx_insight_chunks_timestamp ON insight_chunks(insight_transcript_id, timestamp_start_seconds);
+CREATE INDEX idx_insight_chunks_procedures ON insight_chunks USING GIN(procedures_mentioned);
+CREATE INDEX idx_insight_chunks_tools ON insight_chunks USING GIN(tools_mentioned);
+CREATE INDEX idx_insight_chunks_concepts ON insight_chunks USING GIN(concepts_mentioned);
+CREATE INDEX idx_insight_chunks_embedding ON insight_chunks USING ivfflat(embedding vector_cosine_ops);
+
 -- =====================================================
 -- RLS Policies for Insight Tables
 -- =====================================================
@@ -165,6 +207,7 @@ ALTER TABLE insight_metadata ENABLE ROW LEVEL SECURITY;
 ALTER TABLE insight_tags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE insight_pipeline_status ENABLE ROW LEVEL SECURITY;
 ALTER TABLE insight_content_outputs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE insight_chunks ENABLE ROW LEVEL SECURITY;
 
 -- Users can view their own insight data
 CREATE POLICY "Users can view their insight transcripts" ON insight_transcripts FOR SELECT
@@ -330,6 +373,43 @@ CREATE POLICY "Users can update their content outputs" ON insight_content_output
     )
   );
 
+-- Chunks RLS
+CREATE POLICY "Users can view their insight chunks" ON insight_chunks FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM insight_transcripts it
+      JOIN max_transcriptions t ON t.id = it.transcription_id
+      JOIN max_audio_files a ON a.id = t.audio_file_id
+      JOIN max_projects p ON p.id = a.project_id
+      WHERE it.id = insight_chunks.insight_transcript_id
+      AND p.created_by = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can create insight chunks" ON insight_chunks FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM insight_transcripts it
+      JOIN max_transcriptions t ON t.id = it.transcription_id
+      JOIN max_audio_files a ON a.id = t.audio_file_id
+      JOIN max_projects p ON p.id = a.project_id
+      WHERE it.id = insight_chunks.insight_transcript_id
+      AND p.created_by = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can update their insight chunks" ON insight_chunks FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM insight_transcripts it
+      JOIN max_transcriptions t ON t.id = it.transcription_id
+      JOIN max_audio_files a ON a.id = t.audio_file_id
+      JOIN max_projects p ON p.id = a.project_id
+      WHERE it.id = insight_chunks.insight_transcript_id
+      AND p.created_by = auth.uid()
+    )
+  );
+
 -- =====================================================
 -- Comments for Documentation
 -- =====================================================
@@ -339,3 +419,4 @@ COMMENT ON TABLE insight_metadata IS 'Structured metadata extracted using the Me
 COMMENT ON TABLE insight_tags IS 'Flat tag model for fast filtering. Tags: procedure|tool|audience|domain|theme';
 COMMENT ON TABLE insight_pipeline_status IS 'Tracks workflow progress through Insight stages: metadata extraction, review, chunking, content generation.';
 COMMENT ON TABLE insight_content_outputs IS 'Generated content outputs (emails, LinkedIn posts, blog articles, video clips).';
+COMMENT ON TABLE insight_chunks IS 'Searchable chunks with embeddings for semantic search. Chunks 500-800 tokens with 100-token overlap.';

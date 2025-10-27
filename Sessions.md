@@ -370,24 +370,27 @@ _None yet - Ready to build features!_
 - **Database:** Migration files created for easy deployment to production
 - **Security:** Fixed RLS policy that was too permissive, now properly validates ownership
 
-## Current Session: Session 5 - Insight Pillar (Phase 1 Complete)
+## Current Session: Session 5 - Insight Pillar (Phase 2 Complete)
 
 **Date:** January 27, 2025  
-**Status:** ✅ Phase 1 Complete (Metadata Layer)  
+**Status:** ✅ Phase 2 Complete (Search Layer)  
 **Focus:** Building the Insight knowledge management layer
 
-### What I Completed
-- ✅ Created Insight database schema (insight_transcripts, insight_metadata, insight_tags, insight_pipeline_status, insight_content_outputs)
+### What I Completed (Phase 1 + Phase 2)
+- ✅ Created Insight database schema (insight_transcripts, insight_metadata, insight_tags, insight_pipeline_status, insight_content_outputs, insight_chunks)
 - ✅ Built `/api/insight/send-to-brain` endpoint with Claude integration
 - ✅ Implemented metadata extraction using the rulebook
 - ✅ Added "🚀 Send to Insight" button to Final Version tab
 - ✅ Automatic check if transcript already sent to Insight
+- ✅ Created `/insight` dashboard for browsing and reviewing transcripts
+- ✅ Built chunking algorithm with semantic boundary detection
+- ✅ Added embedding generation system using OpenAI
+- ✅ Created metadata review UI with flag handling
 
-### Next Up - INSIGHT PILLAR (Phase 2: Search Layer)
-- [ ] Create basic admin review dashboard for metadata approval
-- [ ] Build Insight UI at `/insight` route  
-- [ ] Implement chunking and embedding system for semantic search
-- [ ] Add timestamp-based search navigation
+### Next Up - INSIGHT PILLAR (Phase 3: Content Generation)
+- [ ] Implement search functionality with timestamp navigation
+- [ ] Add faceted filtering (procedures, tools, domains, audience)
+- [ ] Build content generation system (emails, LinkedIn, blog)
 
 ### Deferred
 - [ ] Phase 4: Content generation (emails, LinkedIn, blog) - will be Phase 3
