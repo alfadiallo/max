@@ -1,4 +1,4 @@
-export const TRANSLATION_USER_PROMPT = (originalText: string, targetLanguage: string, languageCode: string): string => {
+export const TRANSLATION_USER_PROMPT = (originalText: string, targetLanguage: string, languageCode: string, segments?: any[]): string => {
   const languageNames: Record<string, string> = {
     'sp': 'Spanish',
     'pr': 'Portuguese',
@@ -10,6 +10,32 @@ export const TRANSLATION_USER_PROMPT = (originalText: string, targetLanguage: st
   }
 
   const languageName = languageNames[languageCode] || targetLanguage
+
+  if (segments && segments.length > 0) {
+    // Request segmented translation
+    const segmentFormat = segments.map(seg => 
+      `[${seg.start.toFixed(2)}-${seg.end.toFixed(2)}] ${seg.text}`
+    ).join('\n')
+
+    return `You are an expert translator specializing in medical and technical content. Translate the following English transcription into ${languageName} (${languageCode}).
+
+IMPORTANT REQUIREMENTS:
+1. Maintain the exact same structure with timestamps
+2. Preserve all technical and medical terminology accurately
+3. Use natural, fluent ${languageName} while maintaining technical accuracy
+4. Do NOT translate proper nouns (names, places, brands) unless they have established ${languageName} equivalents
+5. Return the translation in EXACTLY the same format with timestamps
+
+ENGLISH TRANSCRIPTION (with timestamps):
+${segmentFormat}
+
+Return the translation in the same segmented format:
+[start-end] translated_text
+[start-end] translated_text
+etc.
+
+Return ONLY the translated segments with timestamps, no additional commentary.`
+  }
 
   return `You are an expert translator specializing in medical and technical content. Translate the following English transcription into ${languageName} (${languageCode}).
 

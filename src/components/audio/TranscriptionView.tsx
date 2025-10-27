@@ -80,6 +80,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [generatingTranslation, setGeneratingTranslation] = useState<string | null>(null) // language_code being generated
   const [editingTranslation, setEditingTranslation] = useState<string | null>(null) // translation_id being edited
   const [editedTranslationText, setEditedTranslationText] = useState('')
+  const [editedTranslationSegments, setEditedTranslationSegments] = useState<any[]>([])
   const [savingTranslation, setSavingTranslation] = useState(false)
 
   const loadTranscriptions = async () => {
@@ -302,15 +303,9 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     setEditingTranslation(translation.id)
     setEditedTranslationText(translation.translated_text)
     
-    // Load original English transcription for split view
-    if (transcriptions.length > 0) {
-      const transcription = transcriptions[0]
-      // Get final version text for comparison
-      if (transcription.final_version_id !== undefined) {
-        // We'll use this to display side-by-side
-        console.log('Loading original for comparison')
-      }
-    }
+    // Initialize segments array from translation
+    const translationSegments = translation.json_with_timestamps?.segments || []
+    setEditedTranslationSegments(translationSegments)
   }
 
   const handleSaveTranslationVersion = async (translationId: string) => {
@@ -319,8 +314,13 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       const originalTranslation = translations.find((t: any) => t.id === translationId)
       if (!originalTranslation) return
 
-      // Get original segments for timestamp preservation
-      const segments = originalTranslation.json_with_timestamps?.segments || []
+      // Use edited segments or fallback to creating from edited text
+      const segmentsToSave = editedTranslationSegments.length > 0 
+        ? editedTranslationSegments
+        : originalTranslation.json_with_timestamps?.segments?.map((seg: any, idx: number) => ({
+            ...seg,
+            text: editedTranslationText.split(' ').slice(idx, idx + 10).join(' ') // Simplified fallback
+          })) || []
 
       // Save the translation version
       const response = await fetch(`/api/translations/${translationId}/versions`, {
@@ -329,10 +329,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
         body: JSON.stringify({
           edited_text: editedTranslationText,
           json_with_timestamps: {
-            segments: segments.map((seg: any, idx: number) => ({
-              ...seg,
-              text: editedTranslationText // Simplified - in production, segment properly
-            }))
+            segments: segmentsToSave
           }
         })
       })
@@ -379,6 +376,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
         loadTranslations() // Reload to show new version
         setEditingTranslation(null)
         setEditedTranslationText('')
+        setEditedTranslationSegments([])
       } else {
         alert(`Failed to save translation version: ${result.error}`)
       }
@@ -393,6 +391,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const handleCancelEditTranslation = () => {
     setEditingTranslation(null)
     setEditedTranslationText('')
+    setEditedTranslationSegments([])
   }
 
   // Load translations when tab switches to translations
@@ -1094,12 +1093,45 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                     {/* Right: Translated Version (Editable) */}
                     <div className="flex-1 overflow-y-auto">
                       <h4 className="text-sm font-semibold text-gray-600 mb-2">Translation (Editable)</h4>
-                      <textarea
-                        value={editedTranslationText}
-                        onChange={(e) => setEditedTranslationText(e.target.value)}
-                        className="w-full p-3 border border-gray-300 rounded h-[500px] font-sans text-sm"
-                        placeholder="Translation text..."
-                      />
+                      {originalSegments.length > 0 && (
+                        <div className="space-y-3">
+                          {originalSegments.map((seg: any, idx: number) => {
+                            const translatedSegment = editedTranslationSegments[idx] || { text: '', start: seg.start, end: seg.end }
+                            const segmentText = translatedSegment.text || ''
+                            
+                            return (
+                              <div key={idx} className="p-3 bg-blue-50 rounded border border-blue-200">
+                                <div className="text-xs text-gray-500 mb-1">
+                                  {formatTime(seg.start)} - {formatTime(seg.end)}
+                                </div>
+                                <textarea
+                                  value={segmentText}
+                                  onChange={(e) => {
+                                    const newSegments = [...editedTranslationSegments]
+                                    if (!newSegments[idx]) {
+                                      newSegments[idx] = {
+                                        id: seg.id,
+                                        seek: seg.seek,
+                                        start: seg.start,
+                                        end: seg.end,
+                                        text: e.target.value,
+                                        words: []
+                                      }
+                                    } else {
+                                      newSegments[idx] = { ...newSegments[idx], text: e.target.value }
+                                    }
+                                    setEditedTranslationSegments(newSegments)
+                                    setEditedTranslationText(newSegments.map(s => s.text).join(' '))
+                                  }}
+                                  className="w-full p-2 border border-gray-300 rounded text-sm resize-none"
+                                  rows={3}
+                                  placeholder="Translation..."
+                                />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                   

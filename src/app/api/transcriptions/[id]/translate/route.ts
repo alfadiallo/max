@@ -102,8 +102,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       })
     }
 
-    // Call Claude for translation
-    let prompt = TRANSLATION_USER_PROMPT(sourceText, targetLanguage, language_code)
+    // Call Claude for translation with segments
+    let prompt = TRANSLATION_USER_PROMPT(sourceText, targetLanguage, language_code, segments)
     if (dictionaryContext) {
       prompt += dictionaryContext
     }
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const message = await anthropic.messages.create({
       model: 'claude-3-5-sonnet-20240620',
       max_tokens: 4096,
-      system: `You are an expert translator specializing in medical and technical content. Translate accurately while preserving structure, timestamps, and technical terminology.`,
+      system: `You are an expert translator specializing in medical and technical content. Translate accurately while preserving structure, timestamps, and technical terminology. Return translations in the exact same segmented format as the input.`,
       messages: [
         {
           role: 'user',
@@ -127,16 +127,37 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const translatedText = content.text.trim()
 
-    // Parse translated text back into segments (this is a simplified version)
-    // For now, we'll store the full text and let users edit it later
-    const translatedSegments = segments.map((seg: any) => ({
-      id: seg.id,
-      seek: seg.seek,
-      start: seg.start,
-      end: seg.end,
-      text: translatedText, // Simplified - will need better parsing
-      words: seg.words || []
-    }))
+    // Parse segmented translation (format: [start-end] text)
+    const translatedSegments: any[] = []
+    const lines = translatedText.split('\n').filter(line => line.trim())
+    
+    lines.forEach((line, idx) => {
+      const timestampMatch = line.match(/\[(\d+\.?\d*)-(\d+\.?\d*)\]\s*(.*)/)
+      if (timestampMatch) {
+        const [, start, end, text] = timestampMatch
+        translatedSegments.push({
+          id: segments[idx]?.id || idx,
+          seek: segments[idx]?.seek || idx * 1000,
+          start: parseFloat(start),
+          end: parseFloat(end),
+          text: text.trim(),
+          words: []
+        })
+      } else if (idx < segments.length) {
+        // Fallback: use original segment timing
+        translatedSegments.push({
+          id: segments[idx].id,
+          seek: segments[idx].seek,
+          start: segments[idx].start,
+          end: segments[idx].end,
+          text: line.trim(),
+          words: []
+        })
+      }
+    })
+
+    // Build full text from segments
+    const fullTranslatedText = translatedSegments.map(seg => seg.text).join(' ')
 
     // Save to database
     const { data: newTranslation, error: saveError } = await supabase
@@ -144,7 +165,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .insert({
         transcription_id: transcriptionId,
         language_code: language_code,
-        translated_text: translatedText,
+        translated_text: fullTranslatedText,
         json_with_timestamps: {
           segments: translatedSegments,
           metadata: {
