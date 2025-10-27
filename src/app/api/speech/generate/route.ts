@@ -187,6 +187,9 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error('Speech generation error:', error)
+    console.error('Error details:', JSON.stringify(error, null, 2))
+    console.error('Error message:', error.message)
+    console.error('Error stack:', error.stack)
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to generate speech' },
       { status: 500 }
