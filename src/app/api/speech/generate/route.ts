@@ -102,7 +102,16 @@ export async function POST(req: NextRequest) {
     })
 
     // Convert stream to buffer
-    const audioBuffer = Buffer.from(await audioStream.arrayBuffer())
+    const chunks: Uint8Array[] = []
+    const reader = audioStream.getReader()
+    
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) chunks.push(value)
+    }
+    
+    const audioBuffer = Buffer.concat(chunks.map(chunk => Buffer.from(chunk)))
 
     // Upload to Supabase Storage
     const fileName = `speech_${language_code}_${translation_id}_${Date.now()}.mp3`
