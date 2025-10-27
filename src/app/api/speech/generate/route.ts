@@ -113,7 +113,14 @@ export async function POST(req: NextRequest) {
         }
       })
       console.log('Received response from ElevenLabs')
-      audioStream = response.body as ReadableStream<Uint8Array>
+      console.log('Response type:', typeof response)
+      console.log('Response keys:', Object.keys(response || {}))
+      console.log('Response.body:', response.body)
+      console.log('Response.ok:', response.ok)
+      console.log('Response.status:', response.status)
+      
+      // The response IS the stream
+      audioStream = response as any as ReadableStream<Uint8Array>
       console.log('Extracted audio stream')
     } catch (apiError: any) {
       console.error('ElevenLabs API error:', apiError)
