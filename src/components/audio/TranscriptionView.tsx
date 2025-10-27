@@ -488,50 +488,71 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           {activeTab === 'final' && finalVersion && (
             <div className="space-y-4">
               {transcriptions.map((transcription) => {
-                const latestVersion = transcription.versions?.sort((a, b) => b.version_number - a.version_number)[0]
-                const displayText = latestVersion ? latestVersion.edited_text : transcription.raw_text
-                const displayType = latestVersion ? latestVersion.version_type : transcription.transcription_type
+                let finalVersionObj = null
                 
                 if (finalVersion.startsWith('t1-') && finalVersion.includes(transcription.id)) {
                   // Final is T-1
-                  return (
-                    <div key={transcription.id} className="bg-white p-4 rounded border border-green-300">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-green-700">✓ {displayType} - Final Version</h3>
-                        <button
-                          onClick={() => handleAnalyze(transcription.id)}
-                          disabled={analyzing}
-                          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm disabled:opacity-50"
-                        >
-                          {analyzing ? 'Analyzing...' : 'Send for Analysis'}
-                        </button>
-                      </div>
-                      <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{displayText}</p>
-                      </div>
-                    </div>
-                  )
+                  finalVersionObj = {
+                    id: finalVersion,
+                    type: transcription.transcription_type,
+                    text: transcription.raw_text,
+                    segments: transcription.json_with_timestamps?.segments || [],
+                    metadata: transcription.json_with_timestamps?.metadata
+                  }
                 } else if (transcription.versions?.some(v => v.id === finalVersion)) {
                   // Final is a version
-                  return (
-                    <div key={transcription.id} className="bg-white p-4 rounded border border-green-300">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-green-700">✓ {displayType} - Final Version</h3>
+                  const version = transcription.versions.find(v => v.id === finalVersion)
+                  finalVersionObj = {
+                    id: finalVersion,
+                    type: version.version_type,
+                    text: version.edited_text,
+                    segments: version.json_with_timestamps?.segments || [],
+                    metadata: transcription.json_with_timestamps?.metadata
+                  }
+                }
+                
+                if (!finalVersionObj) return null
+                
+                return (
+                  <div key={transcription.id} className="bg-white p-4 rounded border border-green-300">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-green-700">✓ {finalVersionObj.type} - Final Version</h3>
+                      <button
+                        onClick={() => handleAnalyze(transcription.id)}
+                        disabled={analyzing}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm disabled:opacity-50"
+                      >
+                        {analyzing ? 'Analyzing...' : 'Send for Analysis'}
+                      </button>
+                    </div>
+                    
+                    {/* Show Dubbing Script Format button */}
+                    {finalVersionObj.segments.length > 0 && (
+                      <div className="mb-3">
                         <button
-                          onClick={() => handleAnalyze(transcription.id)}
-                          disabled={analyzing}
-                          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm disabled:opacity-50"
+                          onClick={() => setShowExport(showExport === finalVersionObj.id ? null : finalVersionObj.id)}
+                          className="text-xs px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
                         >
-                          {analyzing ? 'Analyzing...' : 'Send for Analysis'}
+                          {showExport === finalVersionObj.id ? 'Hide' : 'Show'} Dubbing Script Format
                         </button>
                       </div>
-                      <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{displayText}</p>
+                    )}
+                    
+                    {/* Dubbing Script Display */}
+                    {showExport === finalVersionObj.id && finalVersionObj.segments.length > 0 && (
+                      <div className="mb-3 bg-purple-50 border border-purple-200 rounded p-3 max-h-64 overflow-y-auto">
+                        <pre className="whitespace-pre-wrap text-xs font-mono">
+                          {finalVersionObj.segments.map(seg => `[${formatTime(seg.start)}-${formatTime(seg.end)}]\n${seg.text}\n`).join('\n')}
+                        </pre>
                       </div>
+                    )}
+                    
+                    {/* Full Text Display */}
+                    <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{finalVersionObj.text}</p>
                     </div>
-                  )
-                }
-                return null
+                  </div>
+                )
               })}
               
               {!transcriptions.some(t => 
