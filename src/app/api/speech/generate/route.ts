@@ -13,6 +13,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { translation_id, language_code } = body
 
+    console.log('Speech generation request:', { translation_id, language_code })
+
     if (!translation_id || !language_code) {
       return NextResponse.json({ success: false, error: 'Missing translation_id or language_code' }, { status: 400 })
     }
@@ -24,7 +26,13 @@ export async function POST(req: NextRequest) {
       .eq('id', translation_id)
       .single()
 
-    if (transError || !translation) {
+    if (transError) {
+      console.error('Translation query error:', transError)
+      return NextResponse.json({ success: false, error: 'Translation not found' }, { status: 404 })
+    }
+
+    if (!translation) {
+      console.error('Translation not found for ID:', translation_id)
       return NextResponse.json({ success: false, error: 'Translation not found' }, { status: 404 })
     }
 
