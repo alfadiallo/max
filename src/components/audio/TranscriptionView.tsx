@@ -71,7 +71,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [editedText, setEditedText] = useState('')
   const [saving, setSaving] = useState(false)
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set())
-  const [activeTab, setActiveTab] = useState<'transcription' | 'final' | 'analysis'>('transcription')
+  const [activeTab, setActiveTab] = useState<'transcription' | 'final' | 'analysis' | 'translations'>('transcription')
   const [finalVersion, setFinalVersion] = useState<string | null>(null) // ID of the promoted final version
   const [analysis, setAnalysis] = useState<any>(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -302,6 +302,16 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
               }`}
             >
               Analysis {analysis && '✓'}
+            </button>
+            <button
+              onClick={() => setActiveTab('translations')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'translations'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              Translations
             </button>
           </div>
 
@@ -787,6 +797,140 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                 </div>
               ) : (
                 <p className="text-sm text-gray-600 italic">No analysis yet. Promote a version to final and click "Send for Analysis".</p>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'translations' && (
+            <div className="space-y-4">
+              {!finalVersion ? (
+                <p className="text-sm text-gray-600 italic text-center py-8">
+                  No final version selected. Go to the <span className="font-medium">Final</span> tab and promote a version to Final first.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600 mb-4">Translate your final transcription into multiple languages:</p>
+                  <div className="grid grid-cols-3 gap-4">
+                    {/* Spanish */}
+                    <div className="border border-gray-300 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🇪🇸</span>
+                          <div>
+                            <div className="font-semibold text-sm">Spanish</div>
+                            <div className="text-xs text-gray-500">sp</div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">Not Started</span>
+                      </div>
+                      <button className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                        Generate Translation
+                      </button>
+                    </div>
+
+                    {/* Portuguese */}
+                    <div className="border border-gray-300 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🇵🇹</span>
+                          <div>
+                            <div className="font-semibold text-sm">Portuguese</div>
+                            <div className="text-xs text-gray-500">pr</div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">Not Started</span>
+                      </div>
+                      <button className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                        Generate Translation
+                      </button>
+                    </div>
+
+                    {/* Arabic */}
+                    <div className="border border-gray-300 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🇸🇦</span>
+                          <div>
+                            <div className="font-semibold text-sm">Arabic</div>
+                            <div className="text-xs text-gray-500">ar</div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">Not Started</span>
+                      </div>
+                      <button className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                        Generate Translation
+                      </button>
+                    </div>
+
+                    {/* French */}
+                    <div className="border border-gray-300 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🇫🇷</span>
+                          <div>
+                            <div className="font-semibold text-sm">French</div>
+                            <div className="text-xs text-gray-500">fr</div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">Not Started</span>
+                      </div>
+                      <button className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                        Generate Translation
+                      </button>
+                    </div>
+
+                    {/* German */}
+                    <div className="border border-gray-300 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🇩🇪</span>
+                          <div>
+                            <div className="font-semibold text-sm">German</div>
+                            <div className="text-xs text-gray-500">ge</div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">Not Started</span>
+                      </div>
+                      <button className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                        Generate Translation
+                      </button>
+                    </div>
+
+                    {/* Italian */}
+                    <div className="border border-gray-300 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🇮🇹</span>
+                          <div>
+                            <div className="font-semibold text-sm">Italian</div>
+                            <div className="text-xs text-gray-500">it</div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">Not Started</span>
+                      </div>
+                      <button className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                        Generate Translation
+                      </button>
+                    </div>
+
+                    {/* Mandarin */}
+                    <div className="border border-gray-300 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🇨🇳</span>
+                          <div>
+                            <div className="font-semibold text-sm">Mandarin</div>
+                            <div className="text-xs text-gray-500">ma</div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">Not Started</span>
+                      </div>
+                      <button className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                        Generate Translation
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           )}
