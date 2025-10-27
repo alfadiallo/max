@@ -304,8 +304,43 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     setEditedTranslationText(translation.translated_text)
     
     // Initialize segments array from translation
+    // Get original segments to match timing
+    let originalSegments: any[] = []
+    if (transcriptions.length > 0) {
+      const transcription = transcriptions[0]
+      if (transcription.final_version_id !== undefined) {
+        if (transcription.final_version_id === null) {
+          originalSegments = transcription.json_with_timestamps?.segments || []
+        } else {
+          const finalVersion = transcription.versions?.find((v: any) => v.id === transcription.final_version_id)
+          if (finalVersion) {
+            originalSegments = finalVersion.json_with_timestamps?.segments || []
+          }
+        }
+      }
+    }
+    
+    // Get translation segments
     const translationSegments = translation.json_with_timestamps?.segments || []
-    setEditedTranslationSegments(translationSegments)
+    
+    // Match translation segments to original segments by timing
+    const matchedSegments = originalSegments.map((originalSeg, idx) => {
+      // Find translation segment with matching or nearest timing
+      const matched = translationSegments.find((ts: any) => 
+        Math.abs(ts.start - originalSeg.start) < 0.5 && Math.abs(ts.end - originalSeg.end) < 0.5
+      ) || translationSegments[idx]
+      
+      return {
+        id: originalSeg.id,
+        seek: originalSeg.seek,
+        start: originalSeg.start,
+        end: originalSeg.end,
+        text: matched?.text || '',
+        words: []
+      }
+    })
+    
+    setEditedTranslationSegments(matchedSegments)
   }
 
   const handleSaveTranslationVersion = async (translationId: string) => {
