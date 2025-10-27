@@ -13,7 +13,8 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS insight_transcripts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   transcription_id UUID NOT NULL REFERENCES max_transcriptions(id) ON DELETE CASCADE,
-  source_final_version_id UUID NOT NULL REFERENCES max_transcription_versions(id) ON DELETE CASCADE,
+  source_final_version_id UUID REFERENCES max_transcription_versions(id) ON DELETE CASCADE,
+  source_is_t1 BOOLEAN DEFAULT FALSE,  -- TRUE if final version is T-1 (raw Whisper)
   
   -- Content (cloned from final version)
   text TEXT NOT NULL,

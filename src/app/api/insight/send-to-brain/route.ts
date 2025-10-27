@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     // Get the final version of the transcription
     const { data: transcription, error: transError } = await supabase
       .from('max_transcriptions')
-      .select('id, final_version_id')
+      .select('id, final_version_id, raw_text, json_with_timestamps')
       .eq('id', transcriptionId)
       .single()
 
@@ -22,22 +22,40 @@ export async function POST(request: Request) {
       return Response.json({ success: false, error: 'Transcription not found' }, { status: 404 })
     }
 
-    if (!transcription.final_version_id) {
+    // Check if final_version_id is undefined (not set at all)
+    if (transcription.final_version_id === undefined) {
       return Response.json({ 
         success: false, 
         error: 'No final version set. Please finalize a transcription version first.' 
       }, { status: 400 })
     }
 
-    // Get the final version details
-    const { data: finalVersion, error: finalError } = await supabase
-      .from('max_transcription_versions')
-      .select('id, edited_text, json_with_timestamps')
-      .eq('id', transcription.final_version_id)
-      .single()
+    let finalVersion: any
+    let finalVersionId: string
 
-    if (finalError || !finalVersion) {
-      return Response.json({ success: false, error: 'Final version not found' }, { status: 404 })
+    // Handle different cases for final version
+    if (transcription.final_version_id === null) {
+      // T-1 (raw Whisper output) is the final version
+      finalVersion = {
+        id: `t1-${transcription.id}`,
+        edited_text: transcription.raw_text,
+        json_with_timestamps: transcription.json_with_timestamps
+      }
+      finalVersionId = `t1-${transcription.id}`
+    } else {
+      // A specific version (H-1, H-2, etc.) is the final version
+      const { data, error: finalError } = await supabase
+        .from('max_transcription_versions')
+        .select('id, edited_text, json_with_timestamps')
+        .eq('id', transcription.final_version_id)
+        .single()
+
+      if (finalError || !data) {
+        return Response.json({ success: false, error: 'Final version not found' }, { status: 404 })
+      }
+
+      finalVersion = data
+      finalVersionId = transcription.final_version_id
     }
 
     // Check if already sent to Insight
@@ -66,7 +84,8 @@ export async function POST(request: Request) {
       .from('insight_transcripts')
       .insert({
         transcription_id: transcriptionId,
-        source_final_version_id: transcription.final_version_id,
+        source_final_version_id: transcription.final_version_id === null ? null : transcription.final_version_id,
+        source_is_t1: transcription.final_version_id === null,
         text: finalVersion.edited_text,
         json_with_timestamps: finalVersion.json_with_timestamps,
         edited_by: user.id,
