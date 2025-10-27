@@ -533,30 +533,24 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                       </button>
                     </div>
                     
-                    {/* Show Dubbing Script Format button */}
+                    {/* Dubbing Script Format - Always Visible */}
                     {finalVersionObj.segments.length > 0 && (
                       <div className="mb-3">
-                        <button
-                          onClick={() => setShowExport(showExport === finalVersionObj.id ? null : finalVersionObj.id)}
-                          className="text-xs px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
-                        >
-                          {showExport === finalVersionObj.id ? 'Hide' : 'Show'} Dubbing Script Format
-                        </button>
-                      </div>
-                    )}
-                    
-                    {/* Dubbing Script Display */}
-                    {showExport === finalVersionObj.id && finalVersionObj.segments.length > 0 && (
-                      <div className="mb-3 bg-purple-50 border border-purple-200 rounded p-3 max-h-64 overflow-y-auto">
-                        <pre className="whitespace-pre-wrap text-xs font-mono">
-                          {finalVersionObj.segments.map(seg => `[${formatTime(seg.start)}-${formatTime(seg.end)}]\n${seg.text}\n`).join('\n')}
-                        </pre>
+                        <h4 className="text-xs font-semibold text-gray-700 mb-2">Dubbing Script Format (with timestamps)</h4>
+                        <div className="bg-purple-50 border border-purple-200 rounded p-3 max-h-64 overflow-y-auto">
+                          <pre className="whitespace-pre-wrap text-xs font-mono">
+                            {finalVersionObj.segments.map(seg => `[${formatTime(seg.start)}-${formatTime(seg.end)}]\n${seg.text}\n`).join('\n')}
+                          </pre>
+                        </div>
                       </div>
                     )}
                     
                     {/* Full Text Display */}
-                    <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{finalVersionObj.text}</p>
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-700 mb-2">Complete Transcript (no timestamps)</h4>
+                      <div className="bg-gray-50 border border-gray-200 rounded p-3 max-h-64 overflow-y-auto">
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{finalVersionObj.text}</p>
+                      </div>
                     </div>
                   </div>
                 )
