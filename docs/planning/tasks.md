@@ -319,107 +319,101 @@ This document tracks development progress by session, enabling you to pick up wh
 
 ---
 
-### Session 4 - [To Be Scheduled]
-**Target:** Phase 2 - Whisper Transcription
-**Estimated Duration:** 6-8 hours
+### Session 4 - October 27, 2025 ✅
+**Target:** Phase 3 - Translation System & Speech Generation
+**Status:** Complete
+**Duration:** ~4 hours
 
-**Goals:**
-1. Call OpenAI Whisper API
-2. Parse and store transcription
-3. Display transcription with timestamps
-4. Test: Upload audio → Get transcription
+**Goals Completed:**
+1. ✅ Implemented translation system with Claude
+2. ✅ Added Translations tab with language selector
+3. ✅ Built split-view editor (English reference + translation)
+4. ✅ Implemented translation versioning (same as transcription)
+5. ✅ Added dictionary integration for translation context
+6. ✅ Integrated ElevenLabs for speech generation
+7. ✅ Created max_generated_speech table and infrastructure
+8. ✅ Audio generated and saved to Supabase Storage
 
 **Key Checkpoints:**
-- [ ] Whisper API call succeeds
-- [ ] Transcription JSON parsed correctly
-- [ ] T-1 entry created in database
-- [ ] Transcription displays with timestamps
-- [ ] Error handling for failed transcriptions
+- [x] Claude generates translations with segments preserved
+- [x] Dictionary terms applied to translations
+- [x] Split-view editor functional (editable translations)
+- [x] Translation versions working (H-1, H-2, etc.)
+- [x] ElevenLabs speech generation working
+- [x] Generated audio uploaded to storage
+- [x] Database records created successfully
+- [x] Audio playback functional
 
-**Preparation:**
-- OpenAI account with API credits
-- Session 3 fully complete
-- Have OPENAI_API_KEY in .env.local
+**Completed Tasks:**
+- Translation System with Claude (100%)
+- Translation Editor with Split View (100%)
+- Translation Versioning System (100%)
+- Dictionary Integration (100%)
+- Speech Generation with ElevenLabs (100%)
+- Generated Speech Storage (100%)
+
+**Files Created/Modified:**
+- `src/app/api/transcriptions/[id]/translate/route.ts` - Claude translation API
+- `src/app/api/translations/[id]/versions/route.ts` - Translation versioning API
+- `src/app/api/translations/[id]/final/route.ts` - Translation final version API
+- `src/app/api/translations/extract-dictionary/route.ts` - Dictionary extraction
+- `src/app/api/speech/generate/route.ts` - ElevenLabs speech generation API
+- `src/components/audio/TranscriptionView.tsx` - Translation tab and editor
+- `src/lib/prompts/translation.ts` - Claude translation prompts
+- `sql/migrations/supabase-create-speech-table.sql` - Speech table migration
+- `sql/migrations/supabase-add-translation-final-version.sql` - Translation final version
+
+**Next Up:**
+- Auto-save functionality for translations
+- Voice cloning feature (future enhancement)
+- Translation quality scoring
+- Build diff viewer for comparing versions
+
+**Session Notes:**
+- Translation prompt explicitly requests segmented output with timestamps
+- Fallback logic handles legacy block translations gracefully
+- Dictionary terms improve translation accuracy over time
+- Speech generation uses generic voices for now (voice cloning to be explored)
+- Database insert failed initially because table didn't exist (now fixed)
+
+**Git Commits:**
+- `Add comprehensive error logging to capture Supabase error details`
+- `Add detailed insert payload logging`
+- `Add test query to check if max_generated_speech table exists`
+
+**Time Spent:**
+- Estimated: 6-8 hours
+- Actual: ~4 hours
+- Notes: Well-organized work, ElevenLabs integration was straightforward
+
+**SQL Migrations Completed:**
+1. ✅ Created max_generated_speech table in Supabase
+2. ✅ Added translation_final_version_id field
+3. ✅ Set up RLS policies for speech table
+
+---
 
 ---
 
 ### Session 5 - [To Be Scheduled]
-**Target:** Phase 2 - Transcription Editing & Versioning
-**Estimated Duration:** 8-10 hours
-
-**Goals:**
-1. Create TranscriptionEditor component
-2. Implement auto-save (every 5 minutes)
-3. Implement versioning (H-1, H-2, etc.)
-4. Create version history UI
-5. Test: Edit transcription → Auto-save → Manual save version
-
-**Key Checkpoints:**
-- [ ] Editing works smoothly
-- [ ] Auto-save indicator appears
-- [ ] Save & Close creates version
-- [ ] Version history shows all versions
-- [ ] Can compare two versions (diff)
-
-**Tricky Parts:**
-- Debouncing auto-save (don't save on every keystroke)
-- Managing draft vs. versioned state
-- Diff algorithm for version comparison
-
-**Preparation:**
-- Session 4 fully complete
-- Review versioning system in MAX-DATABASE-SCHEMA.md
-
----
-
-### Session 6 - [To Be Scheduled]
-**Target:** Phase 3 - Dictionary Management
+**Target:** Auto-save & Additional Features
 **Estimated Duration:** 4-6 hours
 
 **Goals:**
-1. Create dictionary CRUD endpoints
-2. Create dictionary UI (table, add form)
-3. Implement dictionary export/import (CSV)
-4. Test: Add term → Export → Import
+1. Implement auto-save for translations (every 5 minutes)
+2. Add diff viewer for version comparison
+3. Polish UI/UX for speech generation
+4. Add export functionality for generated audio
 
 **Key Checkpoints:**
-- [ ] Can add dictionary term
-- [ ] Can view all terms in table
-- [ ] Can delete term
-- [ ] Export produces valid CSV
-- [ ] Import reads CSV correctly
+- [ ] Auto-save indicator works
+- [ ] Draft versions save correctly
+- [ ] Can compare versions visually
+- [ ] Export button functional
+- [ ] UI polish complete
 
 **Preparation:**
-- Session 5 fully complete
-
----
-
-### Session 7 - [To Be Scheduled]
-**Target:** Phase 3 - Translation with Claude
-**Estimated Duration:** 8-10 hours
-
-**Goals:**
-1. Create translation endpoint (Claude integration)
-2. Pass dictionary context to Claude
-3. Implement translation editor
-4. Test: Transcription → Select Spanish → Generate translation → Edit → Version
-
-**Key Checkpoints:**
-- [ ] Claude generates translation successfully
-- [ ] Dictionary applied automatically
-- [ ] Can edit translation
-- [ ] Version created (H-1-es)
-- [ ] Multiple languages supported
-
-**Tricky Parts:**
-- Dictionary context in Claude prompt (don't lose performance)
-- Multi-language UI (selecting language)
-- Version naming convention (H-1-es vs H-1-pt)
-
-**Preparation:**
-- Session 6 fully complete
-- Anthropic API key ready
-- Review Claude integration in MAX-API-ROUTES.md
+- Session 4 fully complete
 
 ---
 
@@ -504,13 +498,13 @@ This document tracks development progress by session, enabling you to pick up wh
 |-------|--------|----------|-------|
 | Foundation (Auth, Projects, Audio) | ✅ Complete | 2 | Priority P0 |
 | Transcription (Whisper, Editor, Versions, Analysis) | ✅ Complete | 3 | Priority P0 |
-| Dictionary & Translation (Claude) | ⏳ Planned | 2 | Priority P1 |
-| Summaries (Generation, Templates) | ⏳ Planned | 1-2 | Priority P1 |
+| Translation & Speech Generation (Claude, ElevenLabs) | ✅ Complete | 4 | Priority P0 |
+| Auto-save & Polish | ⏳ Planned | 5 | Priority P1 |
 | Testing & Deployment | ⏳ Planned | 1 | Production ready |
 
-**Total Completed Sessions:** 3  
-**Total Completed Hours:** ~16 hours  
-**Current Phase:** Transcription Analysis Complete  
+**Total Completed Sessions:** 4  
+**Total Completed Hours:** ~20 hours  
+**Current Phase:** Translation & Speech Generation Complete  
 **Completion Target:** November 25, 2025
 
 ---
