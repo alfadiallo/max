@@ -32,11 +32,16 @@ CREATE TABLE IF NOT EXISTS max_transcription_analyses (
 );
 
 -- Index for faster lookups
-CREATE INDEX idx_analyses_transcription_id ON max_transcription_analyses(transcription_id);
-CREATE INDEX idx_analyses_content_type ON max_transcription_analyses(content_type);
+CREATE INDEX IF NOT EXISTS idx_analyses_transcription_id ON max_transcription_analyses(transcription_id);
+CREATE INDEX IF NOT EXISTS idx_analyses_content_type ON max_transcription_analyses(content_type);
 
 -- RLS Policies
 ALTER TABLE max_transcription_analyses ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view their transcription analyses" ON max_transcription_analyses;
+DROP POLICY IF EXISTS "Users can create analyses for their transcriptions" ON max_transcription_analyses;
+DROP POLICY IF EXISTS "Users can delete their analyses" ON max_transcription_analyses;
 
 CREATE POLICY "Users can view their transcription analyses" 
 ON max_transcription_analyses FOR SELECT USING (
