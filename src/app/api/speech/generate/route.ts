@@ -86,13 +86,21 @@ export async function POST(req: NextRequest) {
 
     // Voice mapping for each language
     const voiceMap: Record<string, string> = {
-      'sp': 'pNInz6obpgDQGcFmaJgB', // Adam - Spanish
+      'sp': 'ThT5KcBeYPX3keUQqHPh', // Serena - Spanish female (good quality)
       'pr': 'onwK4e9ZLuTAKqWW03F9', // Antoni - Portuguese
       'ar': 'VR6AewLTigWG4xSOukaG', // Arnold - Arabic
       'fr': 'EXAVITQu4vr4xnSDxMaL', // Bella - French
       'ge': 'ErXwobaYiN019PkySvjV', // Dorothy - German
       'it': 'MF3mGyEYCl7XYWbV9V6O', // Elli - Italian
       'ma': 'LcfcDJNUP1GQjkzn1xUU' // Gigi - Mandarin
+    }
+    
+    // For testing with very short text to minimize token usage
+    const MAX_TEST_LENGTH = process.env.ELEVENLABS_TEST_MAX_LENGTH ? parseInt(process.env.ELEVENLABS_TEST_MAX_LENGTH) : 500
+    if (textToSynthesize.length > MAX_TEST_LENGTH) {
+      console.log(`Text length ${textToSynthesize.length} exceeds test limit ${MAX_TEST_LENGTH}, truncating for testing...`)
+      textToSynthesize = textToSynthesize.substring(0, MAX_TEST_LENGTH) + ' [truncated for testing]'
+      console.log(`Truncated to ${textToSynthesize.length} characters`)
     }
 
     const voiceId = voiceMap[language_code] || 'pNInz6obpgDQGcFmaJgB' // Default to Adam
