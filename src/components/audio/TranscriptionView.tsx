@@ -302,6 +302,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   }
 
   const generateSpeech = async (translationId: string, languageCode: string) => {
+    console.log('Generating speech for:', { translationId, languageCode })
     setGeneratingSpeech(translationId)
     try {
       const response = await fetch('/api/speech/generate', {

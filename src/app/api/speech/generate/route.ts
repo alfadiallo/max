@@ -19,10 +19,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing translation_id or language_code' }, { status: 400 })
     }
 
-    // Get translation with final version
+    // Get translation first
     const { data: translation, error: transError } = await supabase
       .from('max_translations')
-      .select('*, versions(*)')
+      .select('*')
       .eq('id', translation_id)
       .single()
 
@@ -36,14 +36,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Translation not found' }, { status: 404 })
     }
 
-    // Get the text to synthesize
+    // Get versions if final_version_id exists
     let textToSynthesize = translation.translated_text
     let segments = translation.json_with_timestamps?.segments || []
 
     // Use final version if it exists
     if (translation.final_version_id) {
-      const finalVersion = translation.versions?.find((v: any) => v.id === translation.final_version_id)
-      if (finalVersion) {
+      const { data: finalVersion, error: versionError } = await supabase
+        .from('max_translation_versions')
+        .select('*')
+        .eq('id', translation.final_version_id)
+        .single()
+
+      if (!versionError && finalVersion) {
         textToSynthesize = finalVersion.edited_text
         segments = finalVersion.json_with_timestamps?.segments || []
       }
