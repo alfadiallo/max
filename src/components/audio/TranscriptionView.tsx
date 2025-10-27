@@ -613,7 +613,6 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
               )}
             </div>
           )}
-          </div>
         </div>
       )}
     </div>
