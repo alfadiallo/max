@@ -383,103 +383,103 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                                   {/* Metadata Box */}
                                   {version.metadata && (
                                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
-                                    {audioDuration !== null && audioDuration !== undefined && (
-                                      <div>
-                                        <span className="text-blue-600 font-medium">Audio length: </span>
-                                        <span className="text-gray-700 font-bold">{formatTime(audioDuration)}</span>
+                                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+                                        {audioDuration !== null && audioDuration !== undefined && (
+                                          <div>
+                                            <span className="text-blue-600 font-medium">Audio length: </span>
+                                            <span className="text-gray-700 font-bold">{formatTime(audioDuration)}</span>
+                                          </div>
+                                        )}
+                                        {version.metadata.transcription_time_seconds !== undefined && (
+                                          <div>
+                                            <span className="text-blue-600 font-medium">Time to transcribe: </span>
+                                            <span className="text-gray-700 font-bold">{version.metadata.transcription_time_seconds}s</span>
+                                          </div>
+                                        )}
+                                        {version.metadata.word_count !== undefined && (
+                                          <div>
+                                            <span className="text-blue-600 font-medium">Words: </span>
+                                            <span className="text-gray-700 font-bold">{version.metadata.word_count.toLocaleString()}</span>
+                                          </div>
+                                        )}
+                                        {version.metadata.text_length !== undefined && (
+                                          <div>
+                                            <span className="text-blue-600 font-medium">Characters: </span>
+                                            <span className="text-gray-700 font-bold">{version.metadata.text_length.toLocaleString()}</span>
+                                          </div>
+                                        )}
+                                        {version.metadata.estimated_cost !== undefined && (
+                                          <div>
+                                            <span className="text-blue-600 font-medium">Est. Cost: </span>
+                                            <span className="text-gray-700 font-bold">${version.metadata.estimated_cost.toFixed(4)}</span>
+                                          </div>
+                                        )}
                                       </div>
-                                    )}
-                                    {version.metadata.transcription_time_seconds !== undefined && (
-                                      <div>
-                                        <span className="text-blue-600 font-medium">Time to transcribe: </span>
-                                        <span className="text-gray-700 font-bold">{version.metadata.transcription_time_seconds}s</span>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Export Button for Video Dubbing */}
+                                  {hasTimestamps && version.segments.length > 0 && (
+                                    <div>
+                                      <button
+                                        onClick={() => setShowExport(showExport === version.id ? null : version.id)}
+                                        className="text-xs px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                                      >
+                                        {showExport === version.id ? 'Hide' : 'Show'} Dubbing Script Format
+                                      </button>
+                                      {showExport === version.id && (
+                                        <div className="mt-2 bg-purple-50 border border-purple-200 rounded p-3 max-h-64 overflow-y-auto">
+                                          <pre className="whitespace-pre-wrap text-xs font-mono">
+                                            {version.segments.map(seg => `[${formatTime(seg.start)}-${formatTime(seg.end)}]\n${seg.text}\n`).join('\n')}
+                                          </pre>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                  
+                                  {/* Editing Interface */}
+                                  {versionIsEditing ? (
+                                    <div>
+                                      <textarea
+                                        value={editedText}
+                                        onChange={(e) => setEditedText(e.target.value)}
+                                        className="w-full p-3 border border-gray-300 rounded-lg text-sm leading-relaxed"
+                                        rows={10}
+                                        placeholder="Edit transcription text..."
+                                      />
+                                      <div className="flex gap-2 mt-3">
+                                        <button
+                                          onClick={() => handleSaveVersion(version.transcriptionId, editingTranscription || '')}
+                                          disabled={saving}
+                                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
+                                        >
+                                          {saving ? 'Saving...' : 'Save Version'}
+                                        </button>
+                                        <button
+                                          onClick={handleCancelEdit}
+                                          disabled={saving}
+                                          className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm disabled:opacity-50"
+                                        >
+                                          Cancel
+                                        </button>
                                       </div>
-                                    )}
-                                    {version.metadata.word_count !== undefined && (
-                                      <div>
-                                        <span className="text-blue-600 font-medium">Words: </span>
-                                        <span className="text-gray-700 font-bold">{version.metadata.word_count.toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                    {version.metadata.text_length !== undefined && (
-                                      <div>
-                                        <span className="text-blue-600 font-medium">Characters: </span>
-                                        <span className="text-gray-700 font-bold">{version.metadata.text_length.toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                    {version.metadata.estimated_cost !== undefined && (
-                                      <div>
-                                        <span className="text-blue-600 font-medium">Est. Cost: </span>
-                                        <span className="text-gray-700 font-bold">${version.metadata.estimated_cost.toFixed(4)}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                              
-                              {/* Export Button for Video Dubbing */}
-                              {hasTimestamps && version.segments.length > 0 && (
-                                <div>
-                                  <button
-                                    onClick={() => setShowExport(showExport === version.id ? null : version.id)}
-                                    className="text-xs px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
-                                  >
-                                    {showExport === version.id ? 'Hide' : 'Show'} Dubbing Script Format
-                                  </button>
-                                  {showExport === version.id && (
-                                    <div className="mt-2 bg-purple-50 border border-purple-200 rounded p-3 max-h-64 overflow-y-auto">
-                                      <pre className="whitespace-pre-wrap text-xs font-mono">
-                                        {version.segments.map(seg => `[${formatTime(seg.start)}-${formatTime(seg.end)}]\n${seg.text}\n`).join('\n')}
-                                      </pre>
+                                    </div>
+                                  ) : (
+                                    /* Display mode - Always show full text */
+                                    <div className="bg-white p-3 rounded border border-gray-200">
+                                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                                        {version.text}
+                                      </p>
                                     </div>
                                   )}
                                 </div>
                               )}
-                              
-                              {/* Editing Interface */}
-                              {versionIsEditing ? (
-                                <div>
-                                  <textarea
-                                    value={editedText}
-                                    onChange={(e) => setEditedText(e.target.value)}
-                                    className="w-full p-3 border border-gray-300 rounded-lg text-sm leading-relaxed"
-                                    rows={10}
-                                    placeholder="Edit transcription text..."
-                                  />
-                                  <div className="flex gap-2 mt-3">
-                                    <button
-                                      onClick={() => handleSaveVersion(version.transcriptionId, editingTranscription || '')}
-                                      disabled={saving}
-                                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
-                                    >
-                                      {saving ? 'Saving...' : 'Save Version'}
-                                    </button>
-                                    <button
-                                      onClick={handleCancelEdit}
-                                      disabled={saving}
-                                      className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm disabled:opacity-50"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                /* Display mode - Always show full text */
-                                <div className="bg-white p-3 rounded border border-gray-200">
-                                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                                    {version.text}
-                                  </p>
-                                </div>
-                              )}
                             </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })}
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </>
