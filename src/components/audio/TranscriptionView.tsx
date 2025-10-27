@@ -82,6 +82,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [editedTranslationText, setEditedTranslationText] = useState('')
   const [editedTranslationSegments, setEditedTranslationSegments] = useState<any[]>([])
   const [savingTranslation, setSavingTranslation] = useState(false)
+  const [generatedSpeech, setGeneratedSpeech] = useState<any[]>([]) // Array of generated speech files
+  const [generatingSpeech, setGeneratingSpeech] = useState<string | null>(null) // translation_id being generated
 
   const loadTranscriptions = async () => {
     setLoading(true)
@@ -296,6 +298,37 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       alert('Failed to generate translation')
     } finally {
       setGeneratingTranslation(null)
+    }
+  }
+
+  const generateSpeech = async (translationId: string, languageCode: string) => {
+    setGeneratingSpeech(translationId)
+    try {
+      const response = await fetch('/api/speech/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          translation_id: translationId,
+          language_code: languageCode
+        })
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        // Reload speech files
+        const speechResponse = await fetch(`/api/speech/generate?translation_id=${translationId}`)
+        const speechResult = await speechResponse.json()
+        if (speechResult.success) {
+          setGeneratedSpeech(speechResult.data || [])
+        }
+      } else {
+        alert(`Speech generation failed: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error generating speech:', error)
+      alert('Failed to generate speech')
+    } finally {
+      setGeneratingSpeech(null)
     }
   }
 
@@ -1068,16 +1101,62 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                               Generating...
                             </div>
                           ) : translation ? (
-                            <div className="flex gap-2">
-                              <button className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm" disabled>
-                                ✓ Complete
-                              </button>
-                              <button 
-                                onClick={() => handleEditTranslation(translation)}
-                                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-                              >
-                                Edit
-                              </button>
+                            <div className="space-y-2">
+                              <div className="flex gap-2">
+                                <button className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm" disabled>
+                                  ✓ Complete
+                                </button>
+                                <button 
+                                  onClick={() => handleEditTranslation(translation)}
+                                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                                >
+                                  Edit
+                                </button>
+                              </div>
+                              {/* Speech Generation */}
+                              {(() => {
+                                const speech = generatedSpeech.find((s: any) => 
+                                  s.translation_id === translation.id && 
+                                  s.language_code === lang.code
+                                )
+                                const isGenerating = generatingSpeech === translation.id
+                                
+                                return (
+                                  <div className="space-y-2">
+                                    {speech ? (
+                                      <div className="border border-green-200 rounded p-2 bg-green-50">
+                                        <div className="text-xs text-gray-600 mb-1">🎵 Generated Audio</div>
+                                        <audio controls className="w-full" src={speech.audio_url}></audio>
+                                        <a 
+                                          href={speech.audio_url} 
+                                          download
+                                          className="block text-xs text-green-700 hover:text-green-900 mt-1 text-center"
+                                        >
+                                          Download MP3
+                                        </a>
+                                      </div>
+                                    ) : (
+                                      <button 
+                                        onClick={() => generateSpeech(translation.id, lang.code)}
+                                        disabled={isGenerating}
+                                        className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                                      >
+                                        {isGenerating ? (
+                                          <>
+                                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Generating...
+                                          </>
+                                        ) : (
+                                          '🎵 Generate Speech'
+                                        )}
+                                      </button>
+                                    )}
+                                  </div>
+                                )
+                              })()}
                             </div>
                           ) : (
                             <button 
