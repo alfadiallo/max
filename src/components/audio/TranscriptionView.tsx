@@ -275,7 +275,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
               ) : (
                 <div className="space-y-2">
                   {transcriptions.map((transcription) => {
-                const metadata = transcription.json_with_timestamps?.metadata
+                    const metadata = transcription.json_with_timestamps?.metadata
                 
                 // Build all versions array: T-1 first, then H-1, H-2, etc. in order
                 const allVersions = [
