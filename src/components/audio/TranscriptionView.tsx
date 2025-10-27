@@ -64,11 +64,15 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([])
   const [loading, setLoading] = useState(false)
   const [showText, setShowText] = useState(false)
-  const [showExport, setShowExport] = useState<string | null>(null) // Track which transcription's export is showing
+  const [showExport, setShowExport] = useState<string | null>(null)
   const [editingTranscription, setEditingTranscription] = useState<string | null>(null)
   const [editedText, setEditedText] = useState('')
   const [saving, setSaving] = useState(false)
-  const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set()) // Track which versions are expanded
+  const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set())
+  const [activeTab, setActiveTab] = useState<'transcription' | 'final' | 'analysis'>('transcription')
+  const [finalVersion, setFinalVersion] = useState<string | null>(null) // ID of the promoted final version
+  const [analysis, setAnalysis] = useState<any>(null)
+  const [analyzing, setAnalyzing] = useState(false)
 
   const loadTranscriptions = async () => {
     setLoading(true)
@@ -171,6 +175,45 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     setEditedText('')
   }
 
+  const handlePromoteToFinal = (versionId: string) => {
+    setFinalVersion(versionId)
+    setActiveTab('final')
+  }
+
+  const handleAnalyze = async (transcriptionId: string) => {
+    setAnalyzing(true)
+    try {
+      const response = await fetch(`/api/transcriptions/${transcriptionId}/analyze`, {
+        method: 'POST'
+      })
+      const result = await response.json()
+      
+      if (result.success) {
+        setAnalysis(result.data)
+        setActiveTab('analysis')
+        alert('Analysis complete!')
+      } else {
+        alert(`Analysis failed: ${result.error}`)
+      }
+    } catch (error: any) {
+      alert(`Error analyzing: ${error.message}`)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const loadAnalysis = async (transcriptionId: string) => {
+    try {
+      const response = await fetch(`/api/transcriptions/${transcriptionId}/analyze`)
+      const result = await response.json()
+      if (result.success) {
+        setAnalysis(result.data)
+      }
+    } catch (error) {
+      console.error('Error loading analysis:', error)
+    }
+  }
+
   return (
     <div className="mt-4">
       <button
@@ -183,13 +226,55 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       
       {showText && (
         <div className="mt-2 bg-gray-50 rounded-lg p-4">
-          {loading ? (
-            <p className="text-sm text-gray-600">Loading transcription...</p>
-          ) : transcriptions.length === 0 ? (
-            <p className="text-sm text-gray-600 italic">No transcription yet</p>
-          ) : (
-            <div className="space-y-2">
-              {transcriptions.map((transcription) => {
+          {/* Tabs */}
+          <div className="flex gap-2 mb-4 border-b border-gray-300">
+            <button
+              onClick={() => setActiveTab('transcription')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'transcription'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              Transcription
+            </button>
+            <button
+              onClick={() => setActiveTab('final')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'final'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              Final {finalVersion && '✓'}
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab('analysis')
+                if (transcriptions.length > 0 && !analysis) {
+                  loadAnalysis(transcriptions[0].id)
+                }
+              }}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'analysis'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              Analysis {analysis && '✓'}
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          {activeTab === 'transcription' && (
+            <>
+              {loading ? (
+                <p className="text-sm text-gray-600">Loading transcription...</p>
+              ) : transcriptions.length === 0 ? (
+                <p className="text-sm text-gray-600 italic">No transcription yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {transcriptions.map((transcription) => {
                 const metadata = transcription.json_with_timestamps?.metadata
                 
                 // Build all versions array: T-1 first, then H-1, H-2, etc. in order
@@ -279,12 +364,20 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                             <div className="px-4 pb-4 space-y-3">
                               {/* Edit Button - only for latest version */}
                               {version.canEdit && !versionIsEditing && (
-                                <button
-                                  onClick={() => handleEdit(version.transcriptionId, version.id)}
-                                  className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                                >
-                                  Edit
-                                </button>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleEdit(version.transcriptionId, version.id)}
+                                    className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handlePromoteToFinal(version.id)}
+                                    className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                                  >
+                                    Promote to Final
+                                  </button>
+                                </div>
                               )}
                               
                               {/* Metadata Box */}
@@ -387,8 +480,140 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                   </div>
                 )
               })}
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'final' && finalVersion && (
+            <div className="space-y-4">
+              {transcriptions.map((transcription) => {
+                const latestVersion = transcription.versions?.sort((a, b) => b.version_number - a.version_number)[0]
+                const displayText = latestVersion ? latestVersion.edited_text : transcription.raw_text
+                const displayType = latestVersion ? latestVersion.version_type : transcription.transcription_type
+                
+                if (finalVersion.startsWith('t1-') && finalVersion.includes(transcription.id)) {
+                  // Final is T-1
+                  return (
+                    <div key={transcription.id} className="bg-white p-4 rounded border border-green-300">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-green-700">✓ {displayType} - Final Version</h3>
+                        <button
+                          onClick={() => handleAnalyze(transcription.id)}
+                          disabled={analyzing}
+                          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm disabled:opacity-50"
+                        >
+                          {analyzing ? 'Analyzing...' : 'Send for Analysis'}
+                        </button>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{displayText}</p>
+                      </div>
+                    </div>
+                  )
+                } else if (transcription.versions?.some(v => v.id === finalVersion)) {
+                  // Final is a version
+                  return (
+                    <div key={transcription.id} className="bg-white p-4 rounded border border-green-300">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-green-700">✓ {displayType} - Final Version</h3>
+                        <button
+                          onClick={() => handleAnalyze(transcription.id)}
+                          disabled={analyzing}
+                          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm disabled:opacity-50"
+                        >
+                          {analyzing ? 'Analyzing...' : 'Send for Analysis'}
+                        </button>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{displayText}</p>
+                      </div>
+                    </div>
+                  )
+                }
+                return null
+              })}
+              
+              {!transcriptions.some(t => 
+                finalVersion.startsWith('t1-') && finalVersion.includes(t.id) ||
+                t.versions?.some(v => v.id === finalVersion)
+              ) && (
+                <p className="text-sm text-gray-600 italic">No final version selected. Promote a version to make it final.</p>
+              )}
             </div>
           )}
+
+          {activeTab === 'analysis' && (
+            <div className="space-y-4">
+              {analyzing ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+                  <span className="ml-3 text-sm text-gray-600">Analyzing content with Claude...</span>
+                </div>
+              ) : analysis ? (
+                <div className="bg-white p-4 rounded border border-gray-200">
+                  <h3 className="text-sm font-semibold mb-3">Content Analysis</h3>
+                  
+                  <div className="space-y-3">
+                    {analysis.content_type && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-600">Content Type: </span>
+                        <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">{analysis.content_type}</span>
+                      </div>
+                    )}
+                    
+                    {analysis.thematic_tags && analysis.thematic_tags.length > 0 && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-600">Themes: </span>
+                        <div className="flex gap-1 flex-wrap mt-1">
+                          {analysis.thematic_tags.map((tag: string, idx: number) => (
+                            <span key={idx} className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {analysis.key_concepts && analysis.key_concepts.length > 0 && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-600">Key Concepts:</span>
+                        <ul className="list-disc list-inside mt-1 text-sm space-y-1">
+                          {analysis.key_concepts.map((concept: string, idx: number) => (
+                            <li key={idx}>{concept}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {analysis.target_audience && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-600">Target Audience: </span>
+                        <span className="text-sm">{analysis.target_audience}</span>
+                      </div>
+                    )}
+                    
+                    {analysis.tone && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-600">Tone: </span>
+                        <span className="text-sm">{analysis.tone}</span>
+                      </div>
+                    )}
+                    
+                    {analysis.summary && (
+                      <div className="border-t border-gray-200 pt-3 mt-3">
+                        <span className="text-xs font-medium text-gray-600">Summary:</span>
+                        <p className="text-sm text-gray-700 mt-1">{analysis.summary}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600 italic">No analysis yet. Promote a version to final and click "Send for Analysis".</p>
+              )}
+            </div>
+          )}
+          </div>
         </div>
       )}
     </div>
