@@ -123,14 +123,22 @@ export async function POST(req: NextRequest) {
       })
       
       console.log('Received response from ElevenLabs')
-      console.log('Response:', response)
+      console.log('Response type:', typeof response)
+      console.log('Response constructor:', response.constructor.name)
+      console.log('Response keys:', Object.keys(response || {}))
+      console.log('Response.body exists:', !!response.body)
+      console.log('Response.body type:', typeof response.body)
       
-      // Access the body stream from the response
-      audioStream = response.body as ReadableStream<Uint8Array>
-      console.log('Extracted audio stream from response.body')
-      
-      if (!audioStream) {
-        throw new Error('No audio stream returned from ElevenLabs')
+      // The response IS the readable stream based on ElevenLabs SDK
+      if (response && typeof response.getReader === 'function') {
+        audioStream = response as ReadableStream<Uint8Array>
+        console.log('Response is directly a ReadableStream')
+      } else if (response.body && typeof response.body.getReader === 'function') {
+        audioStream = response.body as ReadableStream<Uint8Array>
+        console.log('Response has a body that is a ReadableStream')
+      } else {
+        console.error('Unexpected response structure:', response)
+        throw new Error('Unknown response format from ElevenLabs')
       }
     } catch (apiError: any) {
       console.error('ElevenLabs API error:', apiError)
