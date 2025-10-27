@@ -487,9 +487,14 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
             </>
           )}
 
-          {activeTab === 'final' && finalVersion && (
+          {activeTab === 'final' && (
             <div className="space-y-4">
-              {transcriptions.map((transcription) => {
+              {!finalVersion && (
+                <p className="text-sm text-gray-600 italic text-center py-8">
+                  No final version selected. Go to the <span className="font-medium">Transcription</span> tab and click "Promote to Final" on a version.
+                </p>
+              )}
+              {finalVersion && transcriptions.map((transcription) => {
                 let finalVersionObj = null
                 
                 if (finalVersion.startsWith('t1-') && finalVersion.includes(transcription.id)) {
@@ -557,11 +562,11 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                 )
               })}
               
-              {!transcriptions.some(t => 
+              {finalVersion && !transcriptions.some(t => 
                 finalVersion.startsWith('t1-') && finalVersion.includes(t.id) ||
                 t.versions?.some(v => v.id === finalVersion)
               ) && (
-                <p className="text-sm text-gray-600 italic">No final version selected. Promote a version to make it final.</p>
+                <p className="text-sm text-gray-600 italic">No matching version found.</p>
               )}
             </div>
           )}
