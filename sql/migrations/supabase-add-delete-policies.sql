@@ -4,6 +4,11 @@
 -- This allows users to delete their own data
 -- =====================================================
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can delete their audio files" ON max_audio_files;
+DROP POLICY IF EXISTS "Users can delete transcriptions" ON max_transcriptions;
+DROP POLICY IF EXISTS "Users can delete transcription versions" ON max_transcription_versions;
+
 -- max_audio_files: Users can delete their own audio files
 CREATE POLICY "Users can delete their audio files" 
 ON max_audio_files 
