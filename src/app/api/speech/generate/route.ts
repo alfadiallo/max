@@ -196,72 +196,93 @@ export async function POST(req: NextRequest) {
     const fileName = `speech_${language_code}_${translation_id}_${Date.now()}.mp3`
     const filePath = `generated-speech/${fileName}`
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('max-audio')
-      .upload(filePath, audioBuffer, {
-        contentType: 'audio/mpeg',
-        upsert: false
-      })
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError)
-      return NextResponse.json({ success: false, error: 'Failed to upload audio' }, { status: 500 })
-    }
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('max-audio')
-      .getPublicUrl(filePath)
-
-    // Calculate duration (rough estimate: ~150 words per minute)
-    const wordCount = textToSynthesize.split(' ').length
-    const estimatedDuration = Math.round((wordCount / 150) * 60)
-
-    // Save to database
-    if (existingSpeech) {
-      // Update existing record
-      const { data: updatedSpeech, error: updateError } = await supabase
-        .from('max_generated_speech')
-        .update({
-          audio_url: urlData.publicUrl,
-          audio_duration_seconds: estimatedDuration,
-          audio_file_size_bytes: audioBuffer.length,
-          status: 'completed',
-          voice_id: voiceId,
-          voice_type: 'generic',
-          speech_source: translation.final_version_id ? 'edited_text' : 'original_text'
+    try {
+      console.log('Uploading to Supabase Storage...')
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('max-audio')
+        .upload(filePath, audioBuffer, {
+          contentType: 'audio/mpeg',
+          upsert: false
         })
-        .eq('id', existingSpeech.id)
-        .select()
-        .single()
 
-      if (updateError) throw updateError
+      if (uploadError) {
+        console.error('Upload error:', uploadError)
+        return NextResponse.json({ success: false, error: 'Failed to upload audio' }, { status: 500 })
+      }
+      console.log('Upload successful:', uploadData?.path)
 
-      return NextResponse.json({ success: true, data: updatedSpeech }, { status: 200 })
-    } else {
-      // Create new record
-      const { data: newSpeech, error: insertError } = await supabase
-        .from('max_generated_speech')
-        .insert({
-          transcription_id: translation.transcription_id,
-          translation_id: translation_id,
-          language_code: language_code,
-          audio_url: urlData.publicUrl,
-          audio_duration_seconds: estimatedDuration,
-          audio_file_size_bytes: audioBuffer.length,
-          status: 'completed',
-          voice_id: voiceId,
-          voice_name: voiceMap[language_code] || 'Adam',
-          voice_type: 'generic',
-          speech_source: translation.final_version_id ? 'edited_text' : 'original_text',
-          created_by: user.id
-        })
-        .select()
-        .single()
+      // Get public URL
+      console.log('Getting public URL...')
+      const { data: urlData } = supabase.storage
+        .from('max-audio')
+        .getPublicUrl(filePath)
+      console.log('Public URL:', urlData.publicUrl)
 
-      if (insertError) throw insertError
+      // Calculate duration (rough estimate: ~150 words per minute)
+      const wordCount = textToSynthesize.split(' ').length
+      const estimatedDuration = Math.round((wordCount / 150) * 60)
 
-      return NextResponse.json({ success: true, data: newSpeech }, { status: 201 })
+      // Save to database
+      console.log('Saving to database...')
+      if (existingSpeech) {
+        // Update existing record
+        const { data: updatedSpeech, error: updateError } = await supabase
+          .from('max_generated_speech')
+          .update({
+            audio_url: urlData.publicUrl,
+            audio_duration_seconds: estimatedDuration,
+            audio_file_size_bytes: audioBuffer.length,
+            status: 'completed',
+            voice_id: voiceId,
+            voice_type: 'generic',
+            speech_source: translation.final_version_id ? 'edited_text' : 'original_text'
+          })
+          .eq('id', existingSpeech.id)
+          .select()
+          .single()
+
+        if (updateError) {
+          console.error('Database update error:', updateError)
+          throw updateError
+        }
+
+        console.log('Database record updated successfully')
+        return NextResponse.json({ success: true, data: updatedSpeech }, { status: 200 })
+      } else {
+        // Create new record
+        const { data: newSpeech, error: insertError } = await supabase
+          .from('max_generated_speech')
+          .insert({
+            translation_id: translation_id,
+            language_code: language_code,
+            audio_url: urlData.publicUrl,
+            audio_duration_seconds: estimatedDuration,
+            audio_file_size_bytes: audioBuffer.length,
+            status: 'completed',
+            voice_id: voiceId,
+            voice_type: 'generic',
+            speech_source: translation.final_version_id ? 'edited_text' : 'original_text',
+            created_by: user.id
+          })
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('Database insert error:', insertError)
+          throw insertError
+        }
+
+        console.log('Database record created successfully')
+        return NextResponse.json({ success: true, data: newSpeech }, { status: 201 })
+      }
+    } catch (uploadError: any) {
+      console.error('Upload or database error:', uploadError)
+      console.error('Error message:', uploadError.message)
+      console.error('Error stack:', uploadError.stack)
+      return NextResponse.json(
+        { success: false, error: uploadError.message || 'Failed to save audio' },
+        { status: 500 }
+      )
     }
 
   } catch (error: any) {
