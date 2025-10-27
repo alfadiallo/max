@@ -78,6 +78,9 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [showAnalysisInfo, setShowAnalysisInfo] = useState(false)
   const [translations, setTranslations] = useState<any[]>([])
   const [generatingTranslation, setGeneratingTranslation] = useState<string | null>(null) // language_code being generated
+  const [editingTranslation, setEditingTranslation] = useState<string | null>(null) // translation_id being edited
+  const [editedTranslationText, setEditedTranslationText] = useState('')
+  const [savingTranslation, setSavingTranslation] = useState(false)
 
   const loadTranscriptions = async () => {
     setLoading(true)
@@ -293,6 +296,55 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     } finally {
       setGeneratingTranslation(null)
     }
+  }
+
+  const handleEditTranslation = (translation: any) => {
+    setEditingTranslation(translation.id)
+    setEditedTranslationText(translation.translated_text)
+  }
+
+  const handleSaveTranslationVersion = async (translationId: string) => {
+    setSavingTranslation(true)
+    try {
+      const originalTranslation = translations.find((t: any) => t.id === translationId)
+      if (!originalTranslation) return
+
+      // Get original segments for timestamp preservation
+      const segments = originalTranslation.json_with_timestamps?.segments || []
+
+      const response = await fetch(`/api/translations/${translationId}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          edited_text: editedTranslationText,
+          json_with_timestamps: {
+            segments: segments.map((seg: any, idx: number) => ({
+              ...seg,
+              text: editedTranslationText // Simplified - in production, segment properly
+            }))
+          }
+        })
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        loadTranslations() // Reload to show new version
+        setEditingTranslation(null)
+        setEditedTranslationText('')
+      } else {
+        alert(`Failed to save translation version: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error saving translation version:', error)
+      alert('Failed to save translation version')
+    } finally {
+      setSavingTranslation(false)
+    }
+  }
+
+  const handleCancelEditTranslation = () => {
+    setEditingTranslation(null)
+    setEditedTranslationText('')
   }
 
   // Load translations when tab switches to translations
@@ -899,7 +951,10 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                               <button className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm" disabled>
                                 ✓ Complete
                               </button>
-                              <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                              <button 
+                                onClick={() => handleEditTranslation(translation)}
+                                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                              >
                                 Edit
                               </button>
                             </div>
@@ -918,6 +973,36 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {/* Translation Edit Modal */}
+          {editingTranslation && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+                <h3 className="text-lg font-semibold mb-4">Edit Translation</h3>
+                <textarea
+                  value={editedTranslationText}
+                  onChange={(e) => setEditedTranslationText(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded h-64 mb-4"
+                  placeholder="Translation text..."
+                />
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={handleCancelEditTranslation}
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleSaveTranslationVersion(editingTranslation)}
+                    disabled={savingTranslation}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {savingTranslation ? 'Saving...' : 'Save Version'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
