@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // Get transcription
     const { data: transcription, error: transError } = await supabase
       .from('max_transcriptions')
-      .select('*, versions(id, version_type, edited_text, version_number)')
+      .select('*')
       .eq('id', transcriptionId)
       .single()
 
@@ -29,9 +29,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ success: false, error: 'Transcription not found' }, { status: 404 })
     }
 
+    // Get versions for this transcription
+    const { data: versions, error: versionsError } = await supabase
+      .from('max_transcription_versions')
+      .select('*')
+      .eq('transcription_id', transcriptionId)
+      .order('version_number', { ascending: false })
+
     // Get latest version text
-    const versions = transcription.versions?.sort((a: any, b: any) => b.version_number - a.version_number) || []
-    const latestVersion = versions.length > 0 ? versions[0] : null
+    const sortedVersions = versions || []
+    const latestVersion = sortedVersions.length > 0 ? sortedVersions[0] : null
     const transcriptText = latestVersion ? latestVersion.edited_text : transcription.raw_text
 
     // Call Claude for analysis

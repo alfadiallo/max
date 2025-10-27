@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS max_transcription_analyses (
   key_concepts TEXT[], -- Array of main concepts
   target_audience TEXT,
   tone TEXT, -- Formal, Casual, Technical, etc.
+  duration_category TEXT, -- Short, Medium, Long
+  language_style TEXT, -- Technical/Jargon-Heavy, Moderate, Simple
+  summary TEXT, -- Brief summary of content
   
   -- Metadata
   analysis_raw_text TEXT, -- Claude's full response
