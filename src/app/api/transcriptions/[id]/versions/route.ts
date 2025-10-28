@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { prepareEditTrackingData } from '@/lib/utils/diffGenerator'
+import { segmentsToCompleteText } from '@/lib/utils/transcriptionFormat'
 
 // GET /api/transcriptions/[id]/versions - Get all versions for a transcription
 export async function GET(
@@ -80,11 +82,21 @@ export async function POST(
 
     const transcriptionId = params.id
     const body = await req.json()
-    const { edited_text, json_with_timestamps } = body
+    const { edited_text, json_with_timestamps, actual_edits } = body
 
-    if (!edited_text) {
+    // If only timestamped JSON provided, generate complete text from it
+    let finalEditedText = edited_text
+    let finalJsonWithTimestamps = json_with_timestamps
+    
+    if (!finalEditedText && finalJsonWithTimestamps) {
+      // Extract complete text from timestamped segments
+      const segments = finalJsonWithTimestamps.segments || []
+      finalEditedText = segmentsToCompleteText(segments)
+    }
+
+    if (!finalEditedText && !finalJsonWithTimestamps) {
       return NextResponse.json(
-        { success: false, error: 'Missing edited_text' },
+        { success: false, error: 'Missing edited_text or json_with_timestamps' },
         { status: 400 }
       )
     }
@@ -115,6 +127,31 @@ export async function POST(
     const nextVersionNumber = latestVersion ? latestVersion.version_number + 1 : 1
     const versionType = `H-${nextVersionNumber}`
 
+    // Get the previous version text for diff comparison
+    let previousText = transcription.raw_text; // Start with T-1
+    if (latestVersion) {
+      // Get the previous version's edited_text
+      const { data: prevVersion } = await supabase
+        .from('max_transcription_versions')
+        .select('edited_text')
+        .eq('transcription_id', transcriptionId)
+        .eq('version_number', latestVersion.version_number)
+        .single()
+      
+      if (prevVersion) {
+        previousText = prevVersion.edited_text
+      }
+    }
+
+    // Use actual edits provided from UI (only segments user explicitly changed)
+    // OR fall back to empty if not provided
+    const editTrackingData = {
+      edits: actual_edits || [],
+      total_edits: actual_edits ? actual_edits.length : 0,
+      transcription_version_id: '',
+      audio_file_id: transcription.audio_file_id
+    }
+
     // Create new version
     const { data: newVersion, error: insertError } = await supabase
       .from('max_transcription_versions')
@@ -122,9 +159,10 @@ export async function POST(
         transcription_id: transcriptionId,
         version_number: nextVersionNumber,
         version_type: versionType,
-        edited_text,
-        json_with_timestamps: json_with_timestamps || transcription.json_with_timestamps,
-        edited_by: user.id
+        edited_text: finalEditedText,
+        json_with_timestamps: finalJsonWithTimestamps || transcription.json_with_timestamps,
+        edited_by: user.id,
+        dictionary_corrections_applied: editTrackingData.edits as any // Store the edits array
       })
       .select()
       .single()

@@ -69,9 +69,13 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [showExport, setShowExport] = useState<string | null>(null)
   const [editingTranscription, setEditingTranscription] = useState<string | null>(null)
   const [editedText, setEditedText] = useState('')
+  const [editingSegments, setEditingSegments] = useState<any[]>([])
+  const [initialSegments, setInitialSegments] = useState<any[]>([]) // Store initial state for comparison
   const [saving, setSaving] = useState(false)
+  const [editedSegmentIndices, setEditedSegmentIndices] = useState<Set<number>>(new Set())
+  const [currentEditedIndex, setCurrentEditedIndex] = useState<number | null>(null)
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set())
-  const [activeTab, setActiveTab] = useState<'transcription' | 'final' | 'analysis' | 'translations'>('transcription')
+  const [activeTab, setActiveTab] = useState<'original' | 'edits' | 'final' | 'analysis' | 'translations'>('original')
   const [finalVersion, setFinalVersion] = useState<string | null>(null) // ID of the promoted final version
   const [analysis, setAnalysis] = useState<any>(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -127,59 +131,78 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
 
   const handleEdit = (transcriptionId: string, versionId: string) => {
     setEditingTranscription(versionId)
-    // Get the transcription and find the text for this version
+    // Get the transcription and find the segments for this version
     const transcription = transcriptions.find(t => t.id === transcriptionId)
     if (!transcription) return
     
+    // Always get the T-1 segments as the reference (original on left)
+    const t1Segments = transcription.json_with_timestamps?.segments || []
+    
     // Check if this is T-1 (starts with 't1-')
     if (versionId.startsWith('t1-')) {
-      // This is T-1, use raw text
+      // This is T-1, use its own segments
+      const segments = t1Segments.map((seg: any) => ({ ...seg }))
+      setInitialSegments(segments.map((seg: any) => ({ ...seg }))) // Store initial state
+      setEditingSegments(segments)
       setEditedText(transcription.raw_text)
+      updateEditedSegments(segments) // Initialize - no edits at start
     } else {
-      // This is a version, find it
+      // This is a version, get its segments if they exist
       const version = transcription.versions?.find(v => v.id === versionId)
       if (version) {
+        const versionSegments = version.json_with_timestamps?.segments
+        let segments
+        if (versionSegments && versionSegments.length > 0) {
+          segments = versionSegments.map((seg: any) => ({ ...seg }))
+        } else {
+          // Fallback to T-1 segments if version has no segments
+          segments = t1Segments.map((seg: any) => ({ ...seg }))
+        }
+        setInitialSegments(segments.map((seg: any) => ({ ...seg }))) // Store initial state
+        setEditingSegments(segments)
         setEditedText(version.edited_text)
+        updateEditedSegments(segments) // Initialize - detect existing edits
       }
     }
+    setCurrentEditedIndex(null) // Reset current position
   }
 
   const handleSaveVersion = async (transcriptionId: string, currentEditingId: string) => {
     setSaving(true)
     try {
       const transcription = transcriptions.find(t => t.id === transcriptionId)
-      const originalSegments = transcription?.json_with_timestamps?.segments || []
       
-      // Update segments with edited text while preserving timestamps
-      // Since edits are single-word edits, we can use simple word-by-word replacement
-      const editedTextWords = editedText.split(/\s+/)
-      const originalText = transcription.raw_text
-      
-      // Build updated segments by mapping words to segments
-      let wordIndex = 0
-      const updatedSegments = originalSegments.map((segment: any) => {
-        const segmentWords = segment.text.trim().split(/\s+/)
-        const updatedText = editedTextWords.slice(wordIndex, wordIndex + segmentWords.length).join(' ')
-        wordIndex += segmentWords.length
-        
-        return {
-          ...segment,
-          text: updatedText || segment.text
-        }
-      })
-      
+      // Build the updated JSON with edited segments
       const updatedJson = {
         ...transcription?.json_with_timestamps,
-        segments: updatedSegments,
+        segments: editingSegments,
         metadata: transcription?.json_with_timestamps?.metadata
       }
+      
+      // Collect actual edits made during this session (only segments user explicitly changed)
+      const actualEdits: any[] = []
+      editedSegmentIndices.forEach(idx => {
+        const editedSeg = editingSegments[idx]
+        const initialSeg = initialSegments[idx]
+        if (editedSeg && initialSeg) {
+          actualEdits.push({
+            original_text: initialSeg.text,
+            corrected_text: editedSeg.text,
+            position_start: editedSeg.start,
+            position_end: editedSeg.end,
+            context_before: '',
+            context_after: ''
+          })
+        }
+      })
       
       const response = await fetch(`/api/transcriptions/${transcriptionId}/versions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          edited_text: editedText,
-          json_with_timestamps: updatedJson
+          json_with_timestamps: updatedJson,
+          actual_edits: actualEdits
+          // Note: edited_text will be generated from segments by the API
         })
       })
 
@@ -188,6 +211,11 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
         // Reload transcriptions to show new version
         await loadTranscriptions()
         setEditingTranscription(null)
+        setEditingSegments([])
+        setInitialSegments([])
+        setEditedText('')
+        setEditedSegmentIndices(new Set())
+        setCurrentEditedIndex(null)
         alert('Version saved successfully!')
       } else {
         alert(`Failed to save version: ${result.error}`)
@@ -202,6 +230,54 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const handleCancelEdit = () => {
     setEditingTranscription(null)
     setEditedText('')
+    setEditingSegments([])
+    setInitialSegments([])
+    setEditedSegmentIndices(new Set())
+    setCurrentEditedIndex(null)
+  }
+
+  // Helper function to update edited segment tracking (compare against initial state)
+  const updateEditedSegments = (segments: any[]) => {
+    const editedIndices = new Set<number>()
+    segments.forEach((seg, idx) => {
+      const initialSeg = initialSegments[idx]
+      if (initialSeg && seg.text !== initialSeg.text) {
+        editedIndices.add(idx)
+      }
+    })
+    setEditedSegmentIndices(editedIndices)
+  }
+
+  // Navigate to next edited segment
+  const navigateToNextEdited = (segments: any[]) => {
+    const indices = Array.from(editedSegmentIndices).sort((a, b) => a - b)
+    if (indices.length === 0) return
+    
+    const currentIdx = currentEditedIndex !== null ? indices.indexOf(currentEditedIndex) : -1
+    const nextIdx = (currentIdx + 1) % indices.length
+    setCurrentEditedIndex(indices[nextIdx])
+    
+    // Scroll to the segment
+    setTimeout(() => {
+      const element = document.getElementById(`segment-${indices[nextIdx]}`)
+      element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 100)
+  }
+
+  // Navigate to previous edited segment
+  const navigateToPrevEdited = (segments: any[]) => {
+    const indices = Array.from(editedSegmentIndices).sort((a, b) => a - b)
+    if (indices.length === 0) return
+    
+    const currentIdx = currentEditedIndex !== null ? indices.indexOf(currentEditedIndex) : -1
+    const prevIdx = currentIdx <= 0 ? indices.length - 1 : currentIdx - 1
+    setCurrentEditedIndex(indices[prevIdx])
+    
+    // Scroll to the segment
+    setTimeout(() => {
+      const element = document.getElementById(`segment-${indices[prevIdx]}`)
+      element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 100)
   }
 
   const handlePromoteToFinal = async (versionId: string) => {
@@ -626,14 +702,24 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           {/* Tabs */}
           <div className="flex gap-2 mb-4 border-b border-gray-300">
             <button
-              onClick={() => setActiveTab('transcription')}
+              onClick={() => setActiveTab('original')}
               className={`px-4 py-2 text-sm font-medium ${
-                activeTab === 'transcription'
+                activeTab === 'original'
                   ? 'border-b-2 border-blue-600 text-blue-600'
                   : 'text-gray-600 hover:text-gray-800'
               }`}
             >
-              Transcription
+              Original Transcript
+            </button>
+            <button
+              onClick={() => setActiveTab('edits')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'edits'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              Edits
             </button>
             <button
               onClick={() => setActiveTab('final')}
@@ -673,7 +759,41 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           </div>
 
           {/* Tab Content */}
-          {activeTab === 'transcription' && (
+          {activeTab === 'original' && (
+            <>
+              {/* Original Transcript Tab - Read-only T-1 */}
+              {loading ? (
+                <p className="text-sm text-gray-600">Loading transcription...</p>
+              ) : transcriptions.length === 0 ? (
+                <p className="text-sm text-gray-600 italic">No transcription yet</p>
+              ) : transcriptions.map((transcription) => (
+                <div key={transcription.id} className="space-y-3">
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <p className="text-sm font-medium text-yellow-800">
+                      ℹ️ This is the original T-1 (Whisper) transcription - read-only
+                    </p>
+                  </div>
+                  {transcription.json_with_timestamps?.segments && transcription.json_with_timestamps.segments.length > 0 ? (
+                    <div className="bg-white border border-gray-300 rounded p-3 max-h-96 overflow-y-auto">
+                      <pre className="whitespace-pre-wrap text-sm font-mono">
+                        {transcription.json_with_timestamps.segments.map(seg => 
+                          `[${formatTime(seg.start)}-${formatTime(seg.end)}] ${seg.text}`
+                        ).join('\n')}
+                      </pre>
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-gray-300 rounded p-3 max-h-96 overflow-y-auto">
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                        {transcription.raw_text}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+          
+          {activeTab === 'edits' && (
             <>
               {loading ? (
                 <p className="text-sm text-gray-600">Loading transcription...</p>
@@ -684,8 +804,31 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                   {transcriptions.map((transcription) => {
                     const metadata = transcription.json_with_timestamps?.metadata
                     
-                    // Build all versions array: T-1 first, then H-1, H-2, etc. in order
+                    // Build all versions array: H versions in reverse chronological order, then T-1 at bottom
+                    const hVersions = (transcription.versions || [])
+                      .sort((a, b) => a.version_number - b.version_number) // Sort ascending
+                      .map((v) => ({
+                        id: v.id,
+                        transcriptionId: transcription.id,
+                        type: v.version_type,
+                        text: v.edited_text,
+                        created_at: v.created_at,
+                        segments: v.json_with_timestamps?.segments || transcription.json_with_timestamps?.segments || [],
+                        metadata: metadata,
+                        isLatest: false,
+                        canEdit: false
+                      }))
+                      .reverse() // Reverse so latest appears first
+                    
+                    // Mark the latest H version (now first after reverse)
+                    if (hVersions.length > 0) {
+                      hVersions[0].isLatest = true
+                      hVersions[0].canEdit = true
+                    }
+                    
+                    // T-1 goes at bottom
                     const allVersions = [
+                      ...hVersions, // H versions in reverse chronological order (latest first)
                       {
                         id: `t1-${transcription.id}`,
                         transcriptionId: transcription.id,
@@ -696,35 +839,15 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                         metadata: metadata,
                         isLatest: false,
                         canEdit: false
-                      },
-                      ...(transcription.versions || [])
-                        .sort((a, b) => a.version_number - b.version_number)
-                        .map((v) => ({
-                          id: v.id,
-                          transcriptionId: transcription.id,
-                          type: v.version_type,
-                          text: v.edited_text,
-                          created_at: v.created_at,
-                          segments: v.json_with_timestamps?.segments || transcription.json_with_timestamps?.segments || [],
-                          metadata: metadata,
-                          isLatest: false,
-                          canEdit: false
-                        }))
+                      }
                     ]
                     
-                    // Mark the latest version and reverse so most recent is first
-                    if (allVersions.length > 0) {
-                      allVersions[allVersions.length - 1].isLatest = true
-                      allVersions[allVersions.length - 1].canEdit = true
-                    }
-                    
-                    // Reverse array so latest (H-2, H-1, etc.) appears first
-                    allVersions.reverse()
-                    
-                    // Helper functions for collapse/expand (first one is latest after reverse)
-                    const latestVersionId = allVersions[0]?.id
+                    // Helper functions for collapse/expand - find the latest H version
+                    const latestHVersion = allVersions.find(v => v.isLatest)
+                    const latestVersionId = latestHVersion?.id || allVersions[0]?.id // Fallback to first version if no latest
                     const isExpanded = (versionId: string) => {
                       if (expandedVersions.size === 0) {
+                        // Default: expand the latest version (or first if no H versions exist)
                         return versionId === latestVersionId
                       }
                       return expandedVersions.has(versionId)
@@ -751,6 +874,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                             <div key={version.id} className="border border-gray-200 rounded-lg">
                               {/* Version Header - Collapsible */}
                               <button
+                                type="button"
                                 onClick={() => toggleVersion(version.id)}
                                 className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition"
                               >
@@ -824,37 +948,117 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                                       </div>
                                     </div>
                                   )}
-                                  
-                                  {/* Export Button for Video Dubbing */}
-                                  {hasTimestamps && version.segments.length > 0 && (
-                                    <div>
-                                      <button
-                                        onClick={() => setShowExport(showExport === version.id ? null : version.id)}
-                                        className="text-xs px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
-                                      >
-                                        {showExport === version.id ? 'Hide' : 'Show'} Dubbing Script Format
-                                      </button>
-                                      {showExport === version.id && (
-                                        <div className="mt-2 bg-purple-50 border border-purple-200 rounded p-3 max-h-64 overflow-y-auto">
-                                          <pre className="whitespace-pre-wrap text-xs font-mono">
-                                            {version.segments.map(seg => `[${formatTime(seg.start)}-${formatTime(seg.end)}]\n${seg.text}\n`).join('\n')}
-                                          </pre>
+
+                                                                    {/* Editing Interface - Side by Side */}
+                                  {versionIsEditing ? (
+                                    <div className="space-y-4">
+                                      {/* Side-by-side editor */}
+                                      {(() => {
+                                        // Get T-1 segments as reference
+                                        const t1Segments = transcription.json_with_timestamps?.segments || []
+                                        
+                                        return (
+                                          <div className="grid grid-cols-2 gap-4">
+                                            {/* Left: T-1 Original (Read-only) */}
+                                            <div>
+                                              <h4 className="text-sm font-semibold text-gray-700 mb-2">Original T-1 (Reference)</h4>
+                                              <div className="max-h-[80vh] overflow-y-auto space-y-2">
+                                                {t1Segments.map((seg: any, idx: number) => (
+                                                  <div key={idx} className="p-3 bg-gray-50 rounded border border-gray-200">
+                                                    <div className="text-xs text-gray-500 mb-1">
+                                                      {formatTime(seg.start)} - {formatTime(seg.end)}
+                                                    </div>
+                                                    <div className="text-sm leading-relaxed">{seg.text}</div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Right: Editable Version */}
+                                            <div>
+                                              <div className="flex items-center justify-between mb-2">
+                                                <h4 className="text-sm font-semibold text-gray-700">Editing Version (Editable)</h4>
+                                                {editedSegmentIndices.size > 0 && (
+                                                  <span className="text-xs text-orange-600 font-medium">
+                                                    {editedSegmentIndices.size} segment{editedSegmentIndices.size !== 1 ? 's' : ''} edited
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <div className="max-h-[80vh] overflow-y-auto space-y-2">
+                                                {editingSegments.map((seg: any, idx: number) => {
+                                                  const initialSeg = initialSegments[idx]
+                                                  const isEdited = initialSeg && seg.text !== initialSeg.text
+                                                  const isCurrent = currentEditedIndex === idx
+                                                  
+                                                  return (
+                                                    <div 
+                                                      key={idx} 
+                                                      id={`segment-${idx}`}
+                                                      className={`p-3 rounded border ${
+                                                        isCurrent && isEdited 
+                                                          ? 'bg-yellow-50 border-yellow-400 shadow-md' 
+                                                          : isEdited 
+                                                            ? 'bg-orange-50 border-orange-300' 
+                                                            : 'bg-blue-50 border-blue-200'
+                                                      }`}
+                                                    >
+                                                      <div className="flex items-center justify-between mb-1">
+                                                        <div className="text-xs text-gray-500">
+                                                          {formatTime(seg.start)} - {formatTime(seg.end)}
+                                                        </div>
+                                                        {isEdited && (
+                                                          <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded">
+                                                            ✓ Edited
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                      <textarea
+                                                        value={seg.text || ''}
+                                                        onChange={(e) => {
+                                                          const newSegments = [...editingSegments]
+                                                          newSegments[idx] = { ...seg, text: e.target.value }
+                                                          setEditingSegments(newSegments)
+                                                          updateEditedSegments(newSegments)
+                                                          // Update editedText for compatibility
+                                                          setEditedText(newSegments.map((s: any) => s.text).join(' '))
+                                                        }}
+                                                        onFocus={() => setCurrentEditedIndex(idx)}
+                                                        className="w-full p-2 border border-gray-300 rounded text-sm resize-none"
+                                                        rows={3}
+                                                        placeholder="Edit this segment..."
+                                                      />
+                                                    </div>
+                                                  )
+                                                })}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )
+                                      })()}
+                                      
+                                      {/* Navigation buttons for edited segments */}
+                                      {editedSegmentIndices.size > 0 && (
+                                        <div className="flex gap-2 items-center border-t pt-3">
+                                          <span className="text-xs text-gray-600">Navigate edited segments:</span>
+                                          <button
+                                            onClick={() => navigateToPrevEdited(editingSegments)}
+                                            className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm"
+                                            title="Previous edited segment"
+                                          >
+                                            ← Prev
+                                          </button>
+                                          <button
+                                            onClick={() => navigateToNextEdited(editingSegments)}
+                                            className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm"
+                                            title="Next edited segment"
+                                          >
+                                            Next →
+                                          </button>
                                         </div>
                                       )}
-                                    </div>
-                                  )}
-                                  
-                                  {/* Editing Interface */}
-                                  {versionIsEditing ? (
-                                    <div>
-                                      <textarea
-                                        value={editedText}
-                                        onChange={(e) => setEditedText(e.target.value)}
-                                        className="w-full p-3 border border-gray-300 rounded-lg text-sm leading-relaxed"
-                                        rows={10}
-                                        placeholder="Edit transcription text..."
-                                      />
-                                      <div className="flex gap-2 mt-3">
+                                      
+                                      {/* Action buttons */}
+                                      <div className="flex gap-2">
                                         <button
                                           onClick={() => handleSaveVersion(version.transcriptionId, editingTranscription || '')}
                                           disabled={saving}
@@ -872,11 +1076,24 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                                       </div>
                                     </div>
                                   ) : (
-                                    /* Display mode - Always show full text */
-                                    <div className="bg-white p-3 rounded border border-gray-200">
-                                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                                        {version.text}
-                                      </p>
+                                    /* Display mode - Show segments with timestamps */
+                                    <div className="space-y-2">
+                                      {hasTimestamps && version.segments.length > 0 ? (
+                                        version.segments.map((seg: any, idx: number) => (
+                                          <div key={idx} className="p-3 bg-white border border-gray-200 rounded">
+                                            <div className="text-xs text-gray-500 mb-1">
+                                              {formatTime(seg.start)} - {formatTime(seg.end)}
+                                            </div>
+                                            <p className="text-sm leading-relaxed">{seg.text}</p>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <div className="bg-white p-3 rounded border border-gray-200">
+                                          <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                                            {version.text}
+                                          </p>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>

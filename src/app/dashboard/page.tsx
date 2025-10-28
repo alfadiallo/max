@@ -80,6 +80,11 @@ export default function DashboardPage() {
               <h3 className="text-lg font-semibold mb-2">🔎 Search</h3>
               <p className="text-gray-600">Search across all transcripts</p>
             </a>
+
+            <a href="/corrections" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition">
+              <h3 className="text-lg font-semibold mb-2">📝 Corrections</h3>
+              <p className="text-gray-600">Review transcription edits and corrections</p>
+            </a>
           </div>
         </div>
       </main>
