@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { prepareEditTrackingData } from '@/lib/utils/diffGenerator'
 import { segmentsToCompleteText } from '@/lib/utils/transcriptionFormat'
 
 // GET /api/transcriptions/[id]/versions - Get all versions for a transcription
@@ -126,22 +125,6 @@ export async function POST(
 
     const nextVersionNumber = latestVersion ? latestVersion.version_number + 1 : 1
     const versionType = `H-${nextVersionNumber}`
-
-    // Get the previous version text for diff comparison
-    let previousText = transcription.raw_text; // Start with T-1
-    if (latestVersion) {
-      // Get the previous version's edited_text
-      const { data: prevVersion } = await supabase
-        .from('max_transcription_versions')
-        .select('edited_text')
-        .eq('transcription_id', transcriptionId)
-        .eq('version_number', latestVersion.version_number)
-        .single()
-      
-      if (prevVersion) {
-        previousText = prevVersion.edited_text
-      }
-    }
 
     // Use actual edits provided from UI (only segments user explicitly changed)
     // OR fall back to empty if not provided

@@ -66,7 +66,6 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([])
   const [loading, setLoading] = useState(false)
   const [showText, setShowText] = useState(false)
-  const [showExport, setShowExport] = useState<string | null>(null)
   const [editingTranscription, setEditingTranscription] = useState<string | null>(null)
   const [editedText, setEditedText] = useState('')
   const [editingSegments, setEditingSegments] = useState<any[]>([])
