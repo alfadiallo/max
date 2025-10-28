@@ -98,3 +98,8 @@ COMMENT ON COLUMN max_generated_speech.speech_source IS 'Source text: original_t
 COMMENT ON COLUMN max_generated_speech.generation_settings IS 'JSON with ElevenLabs API settings: stability, similarity, style, use_speaker_boost, etc.';
 
 
+
+
+
+
+

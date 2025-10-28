@@ -19,8 +19,7 @@ export async function GET() {
         text,
         status,
         created_at,
-        metadata:insight_metadata(*),
-        tags:insight_tags(*)
+        metadata:insight_metadata(*)
       `)
       .order('created_at', { ascending: false })
 
@@ -29,25 +28,40 @@ export async function GET() {
       return Response.json({ success: false, error: transcriptsError.message }, { status: 500 })
     }
 
-    // Filter to only transcripts the user owns
+    // Filter to only transcripts the user owns and enrich with project/audio names
     const userTranscripts = []
 
     for (const transcript of transcripts || []) {
-      // Check if user owns this transcription
+      // Check if user owns this transcription and get project/audio info
       const { data: transcription } = await supabase
         .from('max_transcriptions')
         .select(`
           audio_file_id,
           audio:max_audio_files!inner(
+            file_name,
             project_id,
-            project:max_projects!inner(created_by)
+            project:max_projects!inner(
+              name,
+              created_by
+            )
           )
         `)
         .eq('id', transcript.transcription_id)
         .single()
 
       if (transcription?.audio?.project?.created_by === user.id) {
-        userTranscripts.push(transcript)
+        // Get metadata separately (join returns array but should be one-to-one)
+        const metadata = Array.isArray(transcript.metadata) && transcript.metadata.length > 0 
+          ? transcript.metadata[0] 
+          : null
+        
+        // Enrich transcript with display names
+        userTranscripts.push({
+          ...transcript,
+          metadata,
+          project_name: transcription.audio.project.name,
+          audio_file_name: transcription.audio.file_name
+        })
       }
     }
 

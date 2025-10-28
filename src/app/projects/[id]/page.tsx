@@ -24,6 +24,7 @@ interface Project {
 interface AudioFile {
   id: string
   file_name: string
+  display_name?: string | null
   file_path: string
   file_size_bytes: number
   duration_seconds: number | null
@@ -40,6 +41,8 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
   const [transcribingFiles, setTranscribingFiles] = useState<Set<string>>(new Set())
+  const [editingDisplayName, setEditingDisplayName] = useState<string | null>(null)
+  const [editingValue, setEditingValue] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
@@ -99,6 +102,32 @@ export default function ProjectDetailPage() {
     } catch (error: any) {
       alert(`Delete error: ${error.message}`)
     }
+  }
+
+  const handleEditDisplayName = (file: AudioFile) => {
+    setEditingDisplayName(file.id)
+    setEditingValue(file.display_name || file.file_name)
+  }
+
+  const handleSaveDisplayName = async (fileId: string) => {
+    try {
+      const { error } = await supabase
+        .from('max_audio_files')
+        .update({ display_name: editingValue })
+        .eq('id', fileId)
+
+      if (error) throw error
+
+      await loadAudioFiles()
+      setEditingDisplayName(null)
+    } catch (error: any) {
+      alert(`Failed to update display name: ${error.message}`)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingDisplayName(null)
+    setEditingValue('')
   }
 
   const loadAudioFiles = async () => {
@@ -169,12 +198,12 @@ export default function ProjectDetailPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
+          <div className="flex justify-between items-start py-4">
             <div>
-              <Link href="/projects" className="text-gray-600 hover:text-gray-900">
+              <h1 className="text-2xl font-bold">{project.name}</h1>
+              <Link href="/projects" className="text-gray-600 hover:text-gray-900 mt-1 inline-block">
                 ← Back to Projects
               </Link>
-              <h1 className="text-2xl font-bold mt-2">{project.name}</h1>
             </div>
             <button 
               onClick={() => setShowUpload(!showUpload)}
@@ -231,7 +260,39 @@ export default function ProjectDetailPage() {
                 <div key={file.id} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex-1">
-                      <p className="font-medium">{file.file_name}</p>
+                      {editingDisplayName === file.id ? (
+                        <div className="flex items-center gap-2 mb-2">
+                          <input
+                            type="text"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') handleSaveDisplayName(file.id)
+                              if (e.key === 'Escape') handleCancelEdit()
+                            }}
+                          />
+                          <button
+                            onClick={() => handleSaveDisplayName(file.id)}
+                            className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 mr-2"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="px-3 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="font-medium cursor-pointer hover:text-blue-600" onClick={() => handleEditDisplayName(file)}>
+                          {file.display_name || file.file_name}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-1">
+                        File name: {file.file_name}
+                      </p>
                       <p className="text-sm text-gray-600">
                         {(file.file_size_bytes / 1024 / 1024).toFixed(2)} MB
                         {file.duration_seconds && ` • ${Math.floor(file.duration_seconds)}s`}

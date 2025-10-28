@@ -36,54 +36,69 @@ export async function POST(request: Request) {
     }
 
     // Chunking algorithm: Three-layer approach
-    // Layer 1: Identify semantic boundaries (topic shifts)
-    // Layer 2: Split into 500-800 token chunks with overlap
-    // Layer 3: Add metadata enrichment
-
+    // Target: 500-800 tokens per chunk
+    // Strategy: Look for natural breaks (sentences) within segments
     const chunks: any[] = []
-    let currentChunk: any = null
-    let tokenCount = 0
     const targetChunkSize = 700 // tokens
-    const overlapSize = 100 // tokens
-
+    const minChunkSize = 400 // tokens (don't create tiny chunks)
+    
+    // First, build one large text blob with timestamps
+    let accumulatedSegments: any[] = []
+    
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i]
-      const segmentText = segment.text
+      accumulatedSegments.push({
+        text: segment.text,
+        start: segment.start,
+        end: segment.end,
+        tokens: Math.ceil(segment.text.length / 4)
+      })
+    }
+    
+    // Now chunk the accumulated text
+    let currentChunk: any = null
+    let currentChunkTokens = 0
+    let currentChunkStart = accumulatedSegments[0]?.start || 0
+    
+    for (let i = 0; i < accumulatedSegments.length; i++) {
+      const seg = accumulatedSegments[i]
+      const segmentTokens = seg.tokens
       
-      // Estimate tokens (rough: 1 token ≈ 4 characters)
-      const estimatedTokens = Math.ceil(segmentText.length / 4)
+      // Check if adding this segment would exceed target
+      const wouldExceed = currentChunkTokens + segmentTokens > targetChunkSize
+      const isFirstSegment = i === 0
       
-      // Check for semantic boundary (topic shift)
-      const isBoundary = detectSemanticBoundary(segment, i, segments)
-
-      // Start new chunk if boundary detected or target size reached
-      if ((currentChunk && (tokenCount + estimatedTokens > targetChunkSize || isBoundary)) || !currentChunk) {
-        // Save previous chunk if exists
+      // Start new chunk if:
+      // 1. This is the first segment, OR
+      // 2. Adding this segment would exceed target size AND we already have a good-sized chunk
+      if (isFirstSegment || (wouldExceed && currentChunkTokens >= minChunkSize)) {
+        // Save previous chunk if it exists and has content
         if (currentChunk) {
           chunks.push(currentChunk)
         }
-
-        // Create new chunk
+        
+        // Start new chunk
         currentChunk = {
           chunk_number: chunks.length,
-          timestamp_start: formatTime(segment.start),
-          timestamp_start_seconds: segment.start,
-          text: segmentText,
-          segments_included: [i],
-          token_count: estimatedTokens
+          timestamp_start: formatTime(seg.start),
+          timestamp_start_seconds: seg.start,
+          timestamp_end: formatTime(seg.end),
+          timestamp_end_seconds: seg.end,
+          text: seg.text,
+          token_count: segmentTokens
         }
-        tokenCount = estimatedTokens
+        currentChunkTokens = segmentTokens
+        currentChunkStart = seg.start
       } else {
         // Add to current chunk
-        currentChunk.text += ' ' + segmentText
-        currentChunk.segments_included.push(i)
-        currentChunk.timestamp_end = formatTime(segment.end)
-        currentChunk.timestamp_end_seconds = segment.end
-        currentChunk.token_count += estimatedTokens
-        tokenCount += estimatedTokens
+        currentChunk.text += ' ' + seg.text
+        currentChunk.timestamp_end = formatTime(seg.end)
+        currentChunk.timestamp_end_seconds = seg.end
+        currentChunk.token_count += segmentTokens
+        currentChunkTokens += segmentTokens
       }
     }
-
+    
     // Add final chunk
     if (currentChunk) {
       chunks.push(currentChunk)
@@ -129,7 +144,34 @@ export async function POST(request: Request) {
     }
 
     // Store chunks in database
-    // Note: We'll create a separate chunks table insert endpoint
+    if (embeddedChunks.length > 0) {
+      const chunkInserts = embeddedChunks.map(chunk => ({
+        insight_transcript_id: insightTranscript.id,
+        chunk_number: chunk.chunk_number,
+        timestamp_start: chunk.timestamp_start,
+        timestamp_start_seconds: Math.round(chunk.timestamp_start_seconds),
+        timestamp_end: chunk.timestamp_end,
+        timestamp_end_seconds: Math.round(chunk.timestamp_end_seconds),
+        duration_seconds: Math.round(chunk.timestamp_end_seconds - chunk.timestamp_start_seconds),
+        text: chunk.text,
+        token_count: chunk.token_count,
+        procedures_mentioned: chunk.procedures_mentioned || [],
+        tools_mentioned: chunk.tools_mentioned || [],
+        concepts_mentioned: chunk.concepts_mentioned || [],
+        semantic_section: chunk.semantic_section,
+        embedding: chunk.embedding
+      }))
+
+      // Insert all chunks
+      const { error: chunksError } = await supabase
+        .from('insight_chunks')
+        .insert(chunkInserts)
+
+      if (chunksError) {
+        console.error('Error storing chunks:', chunksError)
+        // Don't fail completely, but log it
+      }
+    }
 
     // Update pipeline status
     await supabase
@@ -213,7 +255,7 @@ function inferSectionTitle(chunk: any): string {
 
 // Helper: Format time
 function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
+  const mins = Math.floor(Math.round(seconds) / 60)
+  const secs = Math.floor(Math.round(seconds) % 60)
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
