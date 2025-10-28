@@ -370,30 +370,65 @@ _None yet - Ready to build features!_
 - **Database:** Migration files created for easy deployment to production
 - **Security:** Fixed RLS policy that was too permissive, now properly validates ownership
 
-## Current Session: Session 5 - Insight Pillar (Phase 2 Complete)
+## Current Session: Session 6 - Insight System Complete
 
-**Date:** January 27, 2025  
-**Status:** ✅ Phase 2 Complete (Search Layer)  
-**Focus:** Building the Insight knowledge management layer
+**Date:** January 28, 2025  
+**Status:** ✅ Complete  
+**Focus:** Insight Search, Content Review, and UI Improvements
 
-### What I Completed (Phase 1 + Phase 2)
-- ✅ Created Insight database schema (insight_transcripts, insight_metadata, insight_tags, insight_pipeline_status, insight_content_outputs, insight_chunks)
-- ✅ Built `/api/insight/send-to-brain` endpoint with Claude integration
-- ✅ Implemented metadata extraction using the rulebook
-- ✅ Added "🚀 Send to Insight" button to Final Version tab
-- ✅ Automatic check if transcript already sent to Insight
-- ✅ Created `/insight` dashboard for browsing and reviewing transcripts
-- ✅ Built chunking algorithm with semantic boundary detection
-- ✅ Added embedding generation system using OpenAI
-- ✅ Created metadata review UI with flag handling
+### What I Completed (Session 6)
+- ✅ Built semantic search interface for searching transcripts with exact text matching
+- ✅ Implemented context-aware search results showing 150 chars before/after search term
+- ✅ Added search term highlighting in results
+- ✅ Created content review dashboard for approving/rejecting/editing generated content
+- ✅ Added editable display name field for audio files (separate from filename)
+- ✅ Updated dashboard layout with 4 cards (Transcription & Translations, Content Review, Insights, Search)
+- ✅ Added information modals showing criteria for chunking and content generation
+- ✅ Fixed search API to handle database relationships correctly
+- ✅ Added database migration for audio file display_name column
+- ✅ Updated Claude model to claude-sonnet-4-20250514
+- ✅ Standardized navigation links across all pages
+- ✅ Changed "Max Dashboard" to "Dashboard" and moved user name to header
+- ✅ Removed "Audio Upload" and "Setup Complete" cards from dashboard
+- ✅ Renamed "Projects" to "Translations" on dashboard
 
-### Next Up - INSIGHT PILLAR (Phase 3: Content Generation)
-- [ ] Implement search functionality with timestamp navigation
-- [ ] Add faceted filtering (procedures, tools, domains, audience)
-- [ ] Build content generation system (emails, LinkedIn, blog)
+### Files Added/Modified
+- **New API Routes:**
+  - `src/app/api/insight/chunks/route.ts` - Fetch chunks for a transcript
+  - `src/app/api/insight/content/route.ts` - Fetch content outputs for a transcript
+  - `src/app/api/insight/generate-content/route.ts` - Generate marketing content
+  - `src/app/api/insight/metadata/route.ts` - Update and approve metadata
+  - `src/app/api/insight/review/route.ts` - Content review dashboard API
+  - `src/app/api/insight/search/route.ts` - Search transcripts by exact text matching
+- **New Pages:**
+  - `src/app/insight/review/page.tsx` - Content review dashboard
+  - `src/app/insight/search/page.tsx` - Search interface
+- **New Components:**
+  - `src/components/InfoModal.tsx` - Reusable info modal component
+- **Modified:**
+  - `src/app/dashboard/page.tsx` - Updated cards and layout
+  - `src/app/insight/page.tsx` - Added search button, info modals, navigation
+  - `src/app/projects/[id]/page.tsx` - Added editable display name for audio files
+  - `src/app/projects/page.tsx` - Updated title, removed deprecated cards
+  - Various API routes updated with new Claude model version
+- **Database:**
+  - `sql/migrations/supabase-add-audio-display-name.sql` - Migration for display_name field
 
-### Deferred
-- [ ] Phase 4: Content generation (emails, LinkedIn, blog) - will be Phase 3
+### Technical Details
+- **Search:** Exact text matching with context-aware results (150 chars before/after)
+- **Content Review:** Approve/reject/edit workflow for generated marketing content
+- **Display Names:** Audio files can have user-friendly names separate from filename
+- **Dashboard:** 4-card layout with Transcription & Translations, Content Review, Insights, Search
+
+### Git Commit
+- `feat: Add Insight search, content review, and audio file display name editing` (31 files, 2176 insertions)
+
+### Session Notes
+- **Search Implementation:** Converted from semantic (embedding-based) to exact text matching per user request
+- **Context Display:** Shows relevant snippet around search term instead of full chunk
+- **Display Name Feature:** Allows friendly names for audio files (e.g., "Introduction to ISA" instead of "whyisa001_en_source.mp3")
+- **Dashboard Reorganization:** Grouped related features together for better UX
+- **Database Note:** Migration file created but needs to be run in Supabase SQL Editor
 
 ---
 
