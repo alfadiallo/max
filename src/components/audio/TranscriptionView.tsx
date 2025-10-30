@@ -16,6 +16,12 @@ interface Transcription {
     edited_text: string
     created_at: string
     edited_by: string
+    dictionary_corrections_applied?: Array<{
+      original_text: string
+      corrected_text: string
+      position_start: number
+      position_end: number
+    }> | null
     json_with_timestamps?: {
       segments?: Array<{
         id: number
@@ -814,6 +820,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                         created_at: v.created_at,
                         segments: v.json_with_timestamps?.segments || transcription.json_with_timestamps?.segments || [],
                         metadata: metadata,
+                        corrections_applied: v.dictionary_corrections_applied || [], // Store edit data
                         isLatest: false,
                         canEdit: false
                       }))
@@ -836,6 +843,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                         created_at: transcription.created_at,
                         segments: transcription.json_with_timestamps?.segments || [],
                         metadata: metadata,
+                        corrections_applied: [], // T-1 has no edits (it's the original)
                         isLatest: false,
                         canEdit: false
                       }
@@ -1078,14 +1086,30 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                                     /* Display mode - Show segments with timestamps */
                                     <div className="space-y-2">
                                       {hasTimestamps && version.segments.length > 0 ? (
-                                        version.segments.map((seg: any, idx: number) => (
-                                          <div key={idx} className="p-3 bg-white border border-gray-200 rounded">
-                                            <div className="text-xs text-gray-500 mb-1">
-                                              {formatTime(seg.start)} - {formatTime(seg.end)}
+                                        version.segments.map((seg: any, idx: number) => {
+                                          // Check if this segment was edited in this version
+                                          const segmentWasEdited = version.corrections_applied && version.corrections_applied.length > 0 && 
+                                            version.corrections_applied.some((edit: any) => {
+                                              // Check if edit timestamp overlaps with segment timestamp
+                                              return edit.position_start >= seg.start && edit.position_end <= seg.end
+                                            })
+                                          
+                                          return (
+                                            <div key={idx} className="p-3 bg-white border border-gray-200 rounded">
+                                              <div className="flex items-center justify-between mb-1">
+                                                <div className="text-xs text-gray-500">
+                                                  {formatTime(seg.start)} - {formatTime(seg.end)}
+                                                </div>
+                                                {segmentWasEdited && (
+                                                  <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded">
+                                                    ✏️ ✓ Edited
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <p className="text-sm leading-relaxed">{seg.text}</p>
                                             </div>
-                                            <p className="text-sm leading-relaxed">{seg.text}</p>
-                                          </div>
-                                        ))
+                                          )
+                                        })
                                       ) : (
                                         <div className="bg-white p-3 rounded border border-gray-200">
                                           <p className="text-sm leading-relaxed whitespace-pre-wrap">
