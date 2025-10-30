@@ -80,6 +80,12 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [editedSegmentIndices, setEditedSegmentIndices] = useState<Set<number>>(new Set())
   const [currentEditedIndex, setCurrentEditedIndex] = useState<number | null>(null)
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set())
+  const [showFindReplace, setShowFindReplace] = useState(false)
+  const [findReplaceVersion, setFindReplaceVersion] = useState<any>(null)
+  const [findTerm, setFindTerm] = useState('')
+  const [replaceTerm, setReplaceTerm] = useState('')
+  const [findReplaceResults, setFindReplaceResults] = useState<any[]>([])
+  const [selectedFindReplace, setSelectedFindReplace] = useState<Set<number>>(new Set())
   const [activeTab, setActiveTab] = useState<'original' | 'edits' | 'final' | 'analysis' | 'translations'>('original')
   const [finalVersion, setFinalVersion] = useState<string | null>(null) // ID of the promoted final version
   const [analysis, setAnalysis] = useState<any>(null)
@@ -283,6 +289,101 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       const element = document.getElementById(`segment-${indices[prevIdx]}`)
       element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 100)
+  }
+
+  // Handle Find & Replace
+  const handleFindReplace = (version: any) => {
+    setFindReplaceVersion(version)
+    setFindTerm('')
+    setReplaceTerm('')
+    setFindReplaceResults([])
+    setSelectedFindReplace(new Set())
+    setShowFindReplace(true)
+  }
+
+  // Search for occurrences
+  const handleSearchForReplace = () => {
+    if (!findTerm.trim() || !findReplaceVersion) return
+    
+    const results: any[] = []
+    const segments = findReplaceVersion.segments || []
+    
+    // Search through all segments
+    segments.forEach((seg: any, idx: number) => {
+      // Case-insensitive search
+      const lowerText = seg.text.toLowerCase()
+      const lowerFind = findTerm.toLowerCase()
+      
+      if (lowerText.includes(lowerFind)) {
+        // Get context (split by sentences or use full segment)
+        const contextText = seg.text
+        const replacePreview = replaceTerm
+        
+        results.push({
+          segmentIndex: idx,
+          segment: seg,
+          originalText: seg.text,
+          replacementText: replacePreview,
+          context: contextText,
+          checked: true
+        })
+      }
+    })
+    
+    setFindReplaceResults(results)
+    // Auto-select all by default
+    setSelectedFindReplace(new Set(results.map((_, idx) => idx)))
+  }
+
+  // Apply selected replacements
+  const handleApplyFindReplace = () => {
+    if (!findReplaceVersion) return
+    
+    // Start with the current version's segments
+    const currentSegments = findReplaceVersion.segments || []
+    const newSegments = currentSegments.map((seg: any) => ({ ...seg }))
+    const selectedIndices = Array.from(selectedFindReplace)
+    
+    selectedIndices.forEach(resultIdx => {
+      const result = findReplaceResults[resultIdx]
+      const segIdx = result.segmentIndex
+      
+      if (newSegments[segIdx]) {
+        // Perform the replacement in the segment text
+        const originalText = newSegments[segIdx].text
+        // Case-insensitive replace
+        const regex = new RegExp(findTerm, 'gi')
+        const newText = originalText.replace(regex, replaceTerm)
+        
+        newSegments[segIdx] = {
+          ...newSegments[segIdx],
+          text: newText
+        }
+      }
+    })
+    
+    // Initialize editing state with the replacements applied
+    setEditingSegments(newSegments)
+    setInitialSegments(findReplaceVersion.segments.map((seg: any) => ({ ...seg })))
+    updateEditedSegments(newSegments)
+    setEditedText(newSegments.map((s: any) => s.text).join(' '))
+    
+    // Switch to editing mode
+    setEditingTranscription(findReplaceVersion.id)
+    
+    // Close the modal
+    setShowFindReplace(false)
+    setFindReplaceResults([])
+    setSelectedFindReplace(new Set())
+  }
+
+  // Cancel Find & Replace
+  const handleCancelFindReplace = () => {
+    setShowFindReplace(false)
+    setFindTerm('')
+    setReplaceTerm('')
+    setFindReplaceResults([])
+    setSelectedFindReplace(new Set())
   }
 
   const handlePromoteToFinal = async (versionId: string) => {
@@ -908,6 +1009,12 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                                         className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                                       >
                                         Edit
+                                      </button>
+                                      <button
+                                        onClick={() => handleFindReplace(version)}
+                                        className="text-xs px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700"
+                                      >
+                                        🔍 Find & Replace
                                       </button>
                                       <button
                                         onClick={() => handlePromoteToFinal(version.id)}
@@ -1766,6 +1873,154 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
               </div>
             )
           })()}
+        </div>
+      )}
+
+      {/* Find & Replace Modal */}
+      {showFindReplace && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => {
+          if (e.target === e.currentTarget) handleCancelFindReplace()
+        }}>
+          <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold">🔍 Find & Replace</h3>
+              <button
+                onClick={handleCancelFindReplace}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Search Inputs */}
+            <div className="p-4 border-b bg-gray-50">
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Find
+                  </label>
+                  <input
+                    type="text"
+                    value={findTerm}
+                    onChange={(e) => setFindTerm(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && findTerm.trim()) {
+                        handleSearchForReplace()
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="Enter text to find..."
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Replace with
+                  </label>
+                  <input
+                    type="text"
+                    value={replaceTerm}
+                    onChange={(e) => setReplaceTerm(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && findTerm.trim()) {
+                        handleSearchForReplace()
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="Enter replacement text..."
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={handleSearchForReplace}
+                    disabled={!findTerm.trim()}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Search
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Results */}
+            {findReplaceResults.length > 0 && (
+              <div className="flex-1 overflow-y-auto p-4">
+                <div className="mb-3 text-sm text-gray-600">
+                  Found {findReplaceResults.length} occurrence{findReplaceResults.length !== 1 ? 's' : ''}
+                </div>
+                
+                {/* Two-column layout */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Left column: Original */}
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-2 pb-2 border-b">Original</h4>
+                    <div className="space-y-2">
+                      {findReplaceResults.map((result, idx) => (
+                        <div key={idx} className="border rounded p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <input
+                              type="checkbox"
+                              checked={selectedFindReplace.has(idx)}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedFindReplace)
+                                if (e.target.checked) {
+                                  newSelected.add(idx)
+                                } else {
+                                  newSelected.delete(idx)
+                                }
+                                setSelectedFindReplace(newSelected)
+                              }}
+                              className="cursor-pointer"
+                            />
+                            <span className="text-xs text-gray-500">
+                              Segment {result.segmentIndex + 1}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-800">{result.originalText}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right column: Replacement */}
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-2 pb-2 border-b">Replacement</h4>
+                    <div className="space-y-2">
+                      {findReplaceResults.map((result, idx) => (
+                        <div key={idx} className="border rounded p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs text-gray-500">
+                              Segment {result.segmentIndex + 1}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-800">{result.replacementText}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={handleCancelFindReplace}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApplyFindReplace}
+                disabled={findReplaceResults.length === 0 || selectedFindReplace.size === 0}
+                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Apply Selected ({selectedFindReplace.size})
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
