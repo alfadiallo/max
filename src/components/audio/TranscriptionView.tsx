@@ -140,6 +140,43 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     }
   }, [showText, audioFileId])
 
+  // Live search effect - update results as you type
+  useEffect(() => {
+    if (!showFindReplace || !findTerm.trim() || !findReplaceVersion) {
+      setFindReplaceResults([])
+      setSelectedFindReplace(new Set())
+      return
+    }
+
+    const results: any[] = []
+    const segments = findReplaceVersion.segments || []
+    
+    // Search through all segments
+    segments.forEach((seg: any, idx: number) => {
+      // Case-insensitive search
+      const lowerText = seg.text.toLowerCase()
+      const lowerFind = findTerm.toLowerCase()
+      
+      if (lowerText.includes(lowerFind)) {
+        // Get the replacement preview
+        const replacePreview = seg.text.replace(new RegExp(findTerm, 'gi'), replaceTerm)
+        
+        results.push({
+          segmentIndex: idx,
+          segment: seg,
+          originalText: seg.text,
+          replacementText: replacePreview,
+          context: seg.text,
+          checked: true
+        })
+      }
+    })
+    
+    setFindReplaceResults(results)
+    // Auto-select all by default
+    setSelectedFindReplace(new Set(results.map((_, idx) => idx)))
+  }, [findTerm, replaceTerm, findReplaceVersion, showFindReplace])
+
   const handleEdit = (transcriptionId: string, versionId: string) => {
     setEditingTranscription(versionId)
     // Get the transcription and find the segments for this version
@@ -299,40 +336,6 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     setFindReplaceResults([])
     setSelectedFindReplace(new Set())
     setShowFindReplace(true)
-  }
-
-  // Search for occurrences
-  const handleSearchForReplace = () => {
-    if (!findTerm.trim() || !findReplaceVersion) return
-    
-    const results: any[] = []
-    const segments = findReplaceVersion.segments || []
-    
-    // Search through all segments
-    segments.forEach((seg: any, idx: number) => {
-      // Case-insensitive search
-      const lowerText = seg.text.toLowerCase()
-      const lowerFind = findTerm.toLowerCase()
-      
-      if (lowerText.includes(lowerFind)) {
-        // Get context (split by sentences or use full segment)
-        const contextText = seg.text
-        const replacePreview = replaceTerm
-        
-        results.push({
-          segmentIndex: idx,
-          segment: seg,
-          originalText: seg.text,
-          replacementText: replacePreview,
-          context: contextText,
-          checked: true
-        })
-      }
-    })
-    
-    setFindReplaceResults(results)
-    // Auto-select all by default
-    setSelectedFindReplace(new Set(results.map((_, idx) => idx)))
   }
 
   // Apply selected replacements
@@ -1900,17 +1903,17 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
               <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Find
+                    Find (Live Search)
+                    {findTerm.trim() && (
+                      <span className="ml-2 text-xs font-normal text-purple-600">
+                        ({findReplaceResults.length} match{findReplaceResults.length !== 1 ? 'es' : ''})
+                      </span>
+                    )}
                   </label>
                   <input
                     type="text"
                     value={findTerm}
                     onChange={(e) => setFindTerm(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && findTerm.trim()) {
-                        handleSearchForReplace()
-                      }
-                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                     placeholder="Enter text to find..."
                   />
@@ -1923,35 +1926,31 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                     type="text"
                     value={replaceTerm}
                     onChange={(e) => setReplaceTerm(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && findTerm.trim()) {
-                        handleSearchForReplace()
-                      }
-                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                     placeholder="Enter replacement text..."
                   />
-                </div>
-                <div className="flex items-end">
-                  <button
-                    onClick={handleSearchForReplace}
-                    disabled={!findTerm.trim()}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Search
-                  </button>
                 </div>
               </div>
             </div>
 
             {/* Results */}
-            {findReplaceResults.length > 0 && (
-              <div className="flex-1 overflow-y-auto p-4">
-                <div className="mb-3 text-sm text-gray-600">
-                  Found {findReplaceResults.length} occurrence{findReplaceResults.length !== 1 ? 's' : ''}
+            <div className="flex-1 overflow-y-auto p-4">
+              {findReplaceResults.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  {findTerm.trim() ? (
+                    <div className="text-center">
+                      <div className="text-4xl mb-2">🔍</div>
+                      <p className="text-sm">No matches found</p>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <div className="text-4xl mb-2">🔍</div>
+                      <p className="text-sm">Start typing to search...</p>
+                    </div>
+                  )}
                 </div>
-                
-                {/* Two-column layout */}
+              ) : (
+                /* Two-column layout */
                 <div className="grid grid-cols-2 gap-4">
                   {/* Left column: Original */}
                   <div>
@@ -2001,8 +2000,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Footer */}
             <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
