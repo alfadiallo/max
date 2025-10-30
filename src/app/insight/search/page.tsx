@@ -37,7 +37,6 @@ export default function InsightSearchPage() {
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
   const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set())
-  const [searchMode, setSearchMode] = useState<'exact' | 'semantic'>('exact')
 
   // Helper function to highlight search terms in text
   const highlightText = (text: string, searchTerm: string): React.ReactNode => {
@@ -99,19 +98,7 @@ export default function InsightSearchPage() {
     setSearched(true)
 
     try {
-      let response
-      if (searchMode === 'semantic') {
-        // RAG semantic search
-        response = await fetch('/api/insight/rag-search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query })
-        })
-      } else {
-        // Exact text search
-        response = await fetch(`/api/insight/search?query=${encodeURIComponent(query)}`)
-      }
-      
+      const response = await fetch(`/api/insight/search?query=${encodeURIComponent(query)}`)
       const result = await response.json()
 
       if (result.success) {
@@ -149,12 +136,12 @@ export default function InsightSearchPage() {
         <Link href="/dashboard" className="text-gray-600 hover:text-gray-900 inline-block mb-4">
           ← Back to Dashboard
         </Link>
-        <p className="text-gray-600">Search across all your transcripts using exact text or AI-powered semantic search</p>
+        <p className="text-gray-600">Search across all your transcripts using exact text matching</p>
       </div>
 
       {/* Search Bar */}
       <div className="mb-6">
-        <div className="flex gap-2 mb-3">
+        <div className="flex gap-2">
           <input
             type="text"
             value={query}
@@ -170,35 +157,6 @@ export default function InsightSearchPage() {
           >
             {loading ? 'Searching...' : 'Search'}
           </button>
-        </div>
-        
-        {/* Search Mode Toggle */}
-        <div className="flex items-center gap-4 text-sm">
-          <span className="font-semibold text-gray-700">Search Mode:</span>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="searchMode"
-              value="exact"
-              checked={searchMode === 'exact'}
-              onChange={(e) => setSearchMode(e.target.value as 'exact' | 'semantic')}
-              className="cursor-pointer"
-            />
-            <span>Exact Text Match</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="searchMode"
-              value="semantic"
-              checked={searchMode === 'semantic'}
-              onChange={(e) => setSearchMode(e.target.value as 'exact' | 'semantic')}
-              className="cursor-pointer"
-            />
-            <span className="flex items-center gap-1">
-              Semantic Search <span className="text-blue-600 font-bold">✨ AI</span>
-            </span>
-          </label>
         </div>
       </div>
 

@@ -76,9 +76,14 @@ export default function DashboardPage() {
               <p className="text-gray-600">Transcript parsing and data management</p>
             </a>
 
+            <a href="/rag" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition border-2 border-purple-300">
+              <h3 className="text-lg font-semibold mb-2">🤖 RAG Search</h3>
+              <p className="text-gray-600">AI-powered semantic search across knowledge base</p>
+            </a>
+
             <a href="/insight/search" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition">
-              <h3 className="text-lg font-semibold mb-2">🔎 Search</h3>
-              <p className="text-gray-600">Search across all transcripts</p>
+              <h3 className="text-lg font-semibold mb-2">🔎 Text Search</h3>
+              <p className="text-gray-600">Exact text matching in transcripts</p>
             </a>
 
             <a href="/corrections" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition">
