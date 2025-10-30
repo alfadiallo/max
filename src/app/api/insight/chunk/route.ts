@@ -11,10 +11,16 @@ export async function POST(request: Request) {
 
     const supabase = await createClient()
 
+    // Get user for indexed_by tracking
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return Response.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     // Get the Insight transcript
     const { data: insightTranscript, error: transcriptError } = await supabase
       .from('insight_transcripts')
-      .select('id, text, json_with_timestamps')
+      .select('id, text, json_with_timestamps, source_final_version_id')
       .eq('transcription_id', transcriptionId)
       .single()
 
@@ -85,7 +91,8 @@ export async function POST(request: Request) {
           timestamp_end: formatTime(seg.end),
           timestamp_end_seconds: seg.end,
           text: seg.text,
-          token_count: segmentTokens
+          token_count: segmentTokens,
+          segment_markers: [formatTime(seg.start)] // Initialize markers array with start timestamp
         }
         currentChunkTokens = segmentTokens
         currentChunkStart = seg.start
@@ -96,6 +103,8 @@ export async function POST(request: Request) {
         currentChunk.timestamp_end_seconds = seg.end
         currentChunk.token_count += segmentTokens
         currentChunkTokens += segmentTokens
+        // Add segment timestamps to markers array
+        currentChunk.segment_markers.push(formatTime(seg.start))
       }
     }
     
@@ -159,7 +168,10 @@ export async function POST(request: Request) {
         tools_mentioned: chunk.tools_mentioned || [],
         concepts_mentioned: chunk.concepts_mentioned || [],
         semantic_section: chunk.semantic_section,
-        embedding: chunk.embedding
+        embedding: chunk.embedding,
+        // NEW RAG fields
+        segment_markers: chunk.segment_markers, // Array of timestamps
+        final_version_reference_id: insightTranscript.source_final_version_id // H-version UUID
       }))
 
       // Insert all chunks
@@ -170,6 +182,16 @@ export async function POST(request: Request) {
       if (chunksError) {
         console.error('Error storing chunks:', chunksError)
         // Don't fail completely, but log it
+      } else {
+        // Update insight_transcripts with RAG indexing metadata
+        await supabase
+          .from('insight_transcripts')
+          .update({
+            indexed_final_version_id: insightTranscript.source_final_version_id,
+            indexed_at: new Date().toISOString(),
+            indexed_by: user.id
+          })
+          .eq('id', insightTranscript.id)
       }
     }
 
