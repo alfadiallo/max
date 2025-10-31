@@ -21,7 +21,8 @@ export default function DashboardPage() {
       }
     }
     getUser()
-  }, [router, supabase])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
