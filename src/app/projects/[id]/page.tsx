@@ -140,10 +140,31 @@ export default function ProjectDetailPage() {
       
       if (!error && audioData) {
         // Add public URLs for each audio file
-        const filesWithUrls = audioData.map(file => ({
-          ...file,
-          file_url: supabase.storage.from('max-audio').getPublicUrl(file.file_path).data.publicUrl
-        }))
+        const filesWithUrls = await Promise.all(
+          audioData.map(async (file) => {
+            try {
+              // Ensure file_path is the correct format
+              const storagePath = file.file_path.startsWith('audio/') 
+                ? file.file_path 
+                : `audio/${file.file_path}`
+              
+              const { data } = supabase.storage
+                .from('max-audio')
+                .getPublicUrl(storagePath)
+              
+              return {
+                ...file,
+                file_url: data.publicUrl
+              }
+            } catch (err) {
+              console.error('Error generating URL for file:', file.file_name, err)
+              return {
+                ...file,
+                file_url: null
+              }
+            }
+          })
+        )
         setAudioFiles(filesWithUrls)
       }
     } catch (error) {
