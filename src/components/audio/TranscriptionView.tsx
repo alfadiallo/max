@@ -103,6 +103,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [translationsLoaded, setTranslationsLoaded] = useState(false) // Whether translations have been loaded
   const [sendingToInsight, setSendingToInsight] = useState(false) // Whether sending to Insight
   const [sentToInsight, setSentToInsight] = useState<string | null>(null) // transcription_id that was sent
+  const [sendingToRAG, setSendingToRAG] = useState<string | null>(null) // transcription_id being sent to RAG
 
   const loadTranscriptions = async () => {
     setLoading(true)
@@ -459,6 +460,28 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       alert(`Error sending to Insight: ${error.message}`)
     } finally {
       setSendingToInsight(false)
+    }
+  }
+
+  const handleSendToRAG = async (transcriptionId: string) => {
+    setSendingToRAG(transcriptionId)
+    try {
+      const response = await fetch('/api/rag/send-to-rag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcriptionId })
+      })
+      const result = await response.json()
+      
+      if (result.success) {
+        alert(result.message || '✅ Transcript indexed for RAG!')
+      } else {
+        alert(`Failed to index for RAG: ${result.error}`)
+      }
+    } catch (error: any) {
+      alert(`Error indexing for RAG: ${error.message}`)
+    } finally {
+      setSendingToRAG(null)
     }
   }
 
@@ -1306,6 +1329,25 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                             '🚀 Send to Insight'
                           )}
                         </button>
+                        {sentToInsight === transcription.id && (
+                          <button
+                            onClick={() => handleSendToRAG(transcription.id)}
+                            disabled={sendingToRAG === transcription.id}
+                            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded hover:from-purple-700 hover:to-pink-700 text-sm disabled:opacity-50 flex items-center gap-2 border border-purple-400"
+                          >
+                            {sendingToRAG === transcription.id ? (
+                              <>
+                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Indexing...
+                              </>
+                            ) : (
+                              '🤖 Index for RAG'
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
                     
