@@ -278,11 +278,27 @@ Upload audio file to Supabase Storage.
 }
 ```
 
-**Error (413):**
+**Error (400):**
 ```json
 {
   "success": false,
-  "error": "File too large (max 500MB)"
+  "error": "Invalid file type. Detected: audio/unknown (extension: .xyz). Supported: MP3, WAV, M4A, AAC, WebM, OGG, FLAC"
+}
+```
+
+**Error (400):**
+```json
+{
+  "success": false,
+  "error": "File too large. Max size: 500MB"
+}
+```
+
+**Error (404):**
+```json
+{
+  "success": false,
+  "error": "Project not found"
 }
 ```
 
