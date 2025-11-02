@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-// POST /api/audio/upload - Upload audio file to Supabase Storage
+// POST /api/audio/upload - Create database record for uploaded file
+// Note: File is uploaded directly to Supabase Storage from client to bypass Next.js body size limits
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
@@ -16,15 +17,41 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const formData = await req.formData()
-    const file = formData.get('file') as File
-    const projectId = formData.get('project_id') as string
+    // Support both old FormData format and new JSON metadata format
+    const contentType = req.headers.get('content-type') || ''
+    let projectId: string
+    let file: File | null = null
+    let metadata: { file_name: string; file_path: string; file_size_bytes: number; file_url?: string } | null = null
 
-    if (!file || !projectId) {
-      return NextResponse.json(
-        { success: false, error: 'Missing file or project_id' },
-        { status: 400 }
-      )
+    if (contentType.includes('application/json')) {
+      // New format: JSON metadata (file already uploaded to storage)
+      const body = await req.json()
+      projectId = body.project_id
+      metadata = {
+        file_name: body.file_name,
+        file_path: body.file_path,
+        file_size_bytes: body.file_size_bytes,
+        file_url: body.file_url
+      }
+      
+      if (!projectId || !metadata) {
+        return NextResponse.json(
+          { success: false, error: 'Missing project_id or file metadata' },
+          { status: 400 }
+        )
+      }
+    } else {
+      // Old format: FormData (backward compatibility)
+      const formData = await req.formData()
+      file = formData.get('file') as File
+      projectId = formData.get('project_id') as string
+
+      if (!file || !projectId) {
+        return NextResponse.json(
+          { success: false, error: 'Missing file or project_id' },
+          { status: 400 }
+        )
+      }
     }
 
     // Validate file type - check both MIME type and file extension
@@ -58,29 +85,32 @@ export async function POST(req: NextRequest) {
       'audio/x-flac'
     ]
     
-    const allowedExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.webm', '.ogg', '.oga', '.flac']
-    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
-    
-    const isValidMimeType = allowedMimeTypes.includes(file.type.toLowerCase())
-    const isValidExtension = allowedExtensions.includes(fileExtension)
-    
-    if (!isValidMimeType && !isValidExtension) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: `Invalid file type. Detected: ${file.type || 'unknown'} (extension: ${fileExtension}). Supported: MP3, WAV, M4A, AAC, WebM, OGG, FLAC` 
-        },
-        { status: 400 }
-      )
-    }
+    // Validate file if using old FormData format
+    if (file) {
+      const allowedExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.webm', '.ogg', '.oga', '.flac']
+      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
+      
+      const isValidMimeType = allowedMimeTypes.includes(file.type.toLowerCase())
+      const isValidExtension = allowedExtensions.includes(fileExtension)
+      
+      if (!isValidMimeType && !isValidExtension) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: `Invalid file type. Detected: ${file.type || 'unknown'} (extension: ${fileExtension}). Supported: MP3, WAV, M4A, AAC, WebM, OGG, FLAC` 
+          },
+          { status: 400 }
+        )
+      }
 
-    // Validate file size (500MB max)
-    const maxSize = 500 * 1024 * 1024 // 500MB
-    if (file.size > maxSize) {
-      return NextResponse.json(
-        { success: false, error: 'File too large. Max size: 500MB' },
-        { status: 400 }
-      )
+      // Validate file size (500MB max)
+      const maxSize = 500 * 1024 * 1024 // 500MB
+      if (file.size > maxSize) {
+        return NextResponse.json(
+          { success: false, error: 'File too large. Max size: 500MB' },
+          { status: 400 }
+        )
+      }
     }
 
     // Check if user is Editor or Admin
@@ -113,8 +143,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Check if project_type exists
-    if (!project.project_type || !project.project_type.slug) {
+    // Check if project_type exists (only needed for old FormData flow)
+    if (file && (!project.project_type || !project.project_type.slug)) {
       return NextResponse.json(
         { success: false, error: 'Project type not found. Please assign a project type to this project.' },
         { status: 400 }
@@ -122,7 +152,6 @@ export async function POST(req: NextRequest) {
     }
 
     // Ensure user exists in max_users table (required for foreign key constraint)
-    // Use admin client to bypass RLS since there's no INSERT policy for max_users
     const adminClient = createAdminClient()
     const { error: userSyncError } = await adminClient
       .from('max_users')
@@ -140,51 +169,86 @@ export async function POST(req: NextRequest) {
       // Continue anyway - might already exist or RLS might allow it
     }
 
-    // Generate file path
-    const fileName = `${Date.now()}-${file.name}`
-    const storagePath = `audio/${project.project_type.slug}/${fileName}`
+    // Handle old FormData format (backward compatibility)
+    if (file && !metadata) {
+      // Generate file path
+      const fileName = `${Date.now()}-${file.name}`
+      const storagePath = `audio/${project.project_type!.slug}/${fileName}`
 
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('max-audio')
-      .upload(storagePath, file, {
-        contentType: file.type,
-        upsert: false
-      })
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('max-audio')
+        .upload(storagePath, file, {
+          contentType: file.type,
+          upsert: false
+        })
 
-    if (uploadError) throw uploadError
+      if (uploadError) throw uploadError
 
-    // Get public URL for the uploaded file
-    const { data: { publicUrl } } = supabase.storage
-      .from('max-audio')
-      .getPublicUrl(storagePath)
+      // Get public URL for the uploaded file
+      const { data: { publicUrl } } = supabase.storage
+        .from('max-audio')
+        .getPublicUrl(storagePath)
 
-    // Create audio file record in database
-    const { data: audioFile, error: dbError } = await supabase
-      .from('max_audio_files')
-      .insert({
-        project_id: projectId,
-        file_name: file.name,
-        file_path: storagePath,
-        file_size_bytes: file.size,
-        uploaded_by: user.id
-      })
-      .select()
-      .single()
+      // Create audio file record in database
+      const { data: audioFile, error: dbError } = await supabase
+        .from('max_audio_files')
+        .insert({
+          project_id: projectId,
+          file_name: file.name,
+          file_path: storagePath,
+          file_size_bytes: file.size,
+          uploaded_by: user.id
+        })
+        .select()
+        .single()
 
-    if (dbError) throw dbError
+      if (dbError) throw dbError
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: audioFile.id,
-        file_name: audioFile.file_name,
-        file_path: audioFile.file_path,
-        file_url: publicUrl,
-        file_size_bytes: audioFile.file_size_bytes,
-        created_at: audioFile.created_at
-      }
-    }, { status: 201 })
+      return NextResponse.json({
+        success: true,
+        data: {
+          id: audioFile.id,
+          file_name: audioFile.file_name,
+          file_path: audioFile.file_path,
+          file_url: publicUrl,
+          file_size_bytes: audioFile.file_size_bytes,
+          created_at: audioFile.created_at
+        }
+      }, { status: 201 })
+    }
+
+    // Handle new JSON metadata format (file already uploaded to storage)
+    if (metadata) {
+      // Create audio file record in database
+      const { data: audioFile, error: dbError } = await supabase
+        .from('max_audio_files')
+        .insert({
+          project_id: projectId,
+          file_name: metadata.file_name,
+          file_path: metadata.file_path,
+          file_size_bytes: metadata.file_size_bytes,
+          uploaded_by: user.id
+        })
+        .select()
+        .single()
+
+      if (dbError) throw dbError
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          id: audioFile.id,
+          file_name: audioFile.file_name,
+          file_path: audioFile.file_path,
+          file_url: metadata.file_url || null,
+          file_size_bytes: audioFile.file_size_bytes,
+          created_at: audioFile.created_at
+        }
+      }, { status: 201 })
+    }
+
+    throw new Error('Invalid request format')
 
   } catch (error: any) {
     console.error('Upload error:', error)
