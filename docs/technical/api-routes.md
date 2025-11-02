@@ -240,11 +240,28 @@ Upload audio file to Supabase Storage.
 **Content-Type:** `multipart/form-data`
 
 **Fields:**
-- `file` (required): Audio file (MP3, WAV, M4A)
+- `file` (required): Audio file (see supported formats below)
 - `project_id` (required): UUID of project
-- `file_name` (optional): Custom name for file
 
-**Response (200):**
+**Supported File Formats:**
+- MP3: `audio/mpeg`, `audio/mp3`, `audio/x-mpeg-3`, etc.
+- WAV: `audio/wav`, `audio/wave`, `audio/x-wav`, etc.
+- M4A/AAC: `audio/mp4`, `audio/m4a`, `audio/aac`, etc.
+- WebM: `audio/webm`, `audio/webm;codecs=opus`
+- OGG: `audio/ogg`, `audio/oga`, `audio/x-ogg`
+- FLAC: `audio/flac`, `audio/x-flac`
+
+**File Extensions:** `.mp3`, `.wav`, `.m4a`, `.aac`, `.webm`, `.ogg`, `.oga`, `.flac`
+
+**File Size Limit:** 500MB
+
+**Access Control:**
+- **Editors and Admins**: Can upload to any project
+- **Regular Users**: Can only upload to projects they created
+
+**Auto-Sync:** User is automatically synced to `max_users` table if not already present (required for foreign key constraint).
+
+**Response (201):**
 ```json
 {
   "success": true,

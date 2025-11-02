@@ -16,15 +16,23 @@ export async function GET(req: NextRequest) {
     }
 
     // Get projects with project types
-    const { data: projects, error } = await supabase
+    // Editors should see ALL projects, not just ones they created
+    const isEditor = user.user_metadata?.role === 'Editor' || user.user_metadata?.role === 'editor'
+    
+    let query = supabase
       .from('max_projects')
       .select(`
         *,
         project_type:max_project_types(*)
       `)
-      .eq('created_by', user.id)
       .eq('archived', false)
-      .order('created_at', { ascending: false })
+    
+    // Only filter by created_by if user is NOT an Editor
+    if (!isEditor) {
+      query = query.eq('created_by', user.id)
+    }
+    
+    const { data: projects, error } = await query.order('created_at', { ascending: false })
 
     if (error) throw error
 

@@ -31,16 +31,61 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // Get user role
+  const userRole = user?.user_metadata?.role
+
   // Protect dashboard routes
   if (request.nextUrl.pathname.startsWith('/dashboard') && !user) {
     const redirectUrl = new URL('/login', request.url)
     return NextResponse.redirect(redirectUrl)
   }
 
+  // Redirect Editors away from dashboard to projects
+  if (request.nextUrl.pathname.startsWith('/dashboard') && user && (userRole === 'Editor' || userRole === 'editor')) {
+    const redirectUrl = new URL('/projects', request.url)
+    return NextResponse.redirect(redirectUrl)
+  }
+
+  // Restrict Editors to ONLY /projects routes (Transcription & Translations)
+  // Editors cannot access: /dashboard, /insight, /rag, /corrections, /admin, etc.
+  if (user && (userRole === 'Editor' || userRole === 'editor')) {
+    const editorAllowedPaths = [
+      '/projects',        // Transcription & Translations - ONLY allowed route
+      '/login',           // Auth pages
+      '/register',
+      '/forgot-password', // Password reset
+      '/reset-password',
+      '/api',             // API routes (needed for /projects to work)
+      '/'                 // Home page
+    ]
+    const isEditorAllowed = editorAllowedPaths.some(path => {
+      if (path === '/') {
+        return request.nextUrl.pathname === '/'
+      }
+      return request.nextUrl.pathname.startsWith(path)
+    })
+    
+    if (!isEditorAllowed) {
+      // Redirect to projects if Editor tries to access any other route
+      const redirectUrl = new URL('/projects', request.url)
+      return NextResponse.redirect(redirectUrl)
+    }
+  }
+
+  // Allow password reset routes for everyone (unauthenticated)
+  const passwordResetRoutes = ['/forgot-password', '/reset-password']
+  if (passwordResetRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
+    return supabaseResponse
+  }
+
   // Redirect authenticated users away from auth pages
   if ((request.nextUrl.pathname.startsWith('/login') || 
        request.nextUrl.pathname.startsWith('/register')) && user) {
-    const redirectUrl = new URL('/dashboard', request.url)
+    // Redirect Editors to projects, Admins to dashboard
+    const redirectUrl = new URL(
+      (userRole === 'Editor' || userRole === 'editor') ? '/projects' : '/dashboard',
+      request.url
+    )
     return NextResponse.redirect(redirectUrl)
   }
 

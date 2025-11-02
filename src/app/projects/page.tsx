@@ -44,15 +44,32 @@ export default function ProjectsPage() {
       setProjectTypes(types || [])
 
       // Load projects
-      const { data: projData } = await supabase
+      // Editors should see ALL projects, not just ones they created
+      const isEditor = user.user_metadata?.role === 'Editor' || user.user_metadata?.role === 'editor'
+      
+      console.log('Loading projects for user:', user.email, 'Role:', user.user_metadata?.role, 'IsEditor:', isEditor)
+      
+      let query = supabase
         .from('max_projects')
         .select(`
           *,
           project_type:max_project_types(*)
         `)
-        .eq('created_by', user.id)
         .eq('archived', false)
-        .order('created_at', { ascending: false })
+      
+      // Only filter by created_by if user is NOT an Editor
+      if (!isEditor) {
+        query = query.eq('created_by', user.id)
+      }
+      
+      const { data: projData, error: projectsError } = await query.order('created_at', { ascending: false })
+      
+      if (projectsError) {
+        console.error('Error loading projects:', projectsError)
+        alert(`Error loading projects: ${projectsError.message}`)
+      } else {
+        console.log('Projects loaded:', projData?.length || 0, 'projects')
+      }
       
       setProjects(projData || [])
       setLoading(false)

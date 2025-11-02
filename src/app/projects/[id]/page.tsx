@@ -132,13 +132,24 @@ export default function ProjectDetailPage() {
 
   const loadAudioFiles = async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const isEditor = user?.user_metadata?.role === 'Editor' || user?.user_metadata?.role === 'editor'
+      
+      console.log('Loading audio files for project:', projectId, 'User:', user?.email, 'IsEditor:', isEditor)
+      
       const { data: audioData, error } = await supabase
         .from('max_audio_files')
         .select('*')
         .eq('project_id', projectId)
         .order('created_at', { ascending: false })
       
+      if (error) {
+        console.error('Error loading audio files:', error)
+        alert(`Error loading audio files: ${error.message}. You may need to run the RLS policy migration.`)
+      }
+      
       if (!error && audioData) {
+        console.log('Audio files loaded:', audioData.length, 'files')
         // Add public URLs for each audio file
         const filesWithUrls = await Promise.all(
           audioData.map(async (file) => {
@@ -181,17 +192,26 @@ export default function ProjectDetailPage() {
       }
 
       // Load project
-      const { data: projData, error } = await supabase
+      // Editors should be able to view all projects
+      const isEditor = user.user_metadata?.role === 'Editor' || user.user_metadata?.role === 'editor'
+      
+      let query = supabase
         .from('max_projects')
         .select(`
           *,
           project_type:max_project_types(*)
         `)
         .eq('id', projectId)
-        .eq('created_by', user.id)
-        .single()
+      
+      // Only filter by created_by if user is NOT an Editor
+      if (!isEditor) {
+        query = query.eq('created_by', user.id)
+      }
+      
+      const { data: projData, error } = await query.single()
 
       if (error || !projData) {
+        console.error('Error loading project:', error)
         router.push('/projects')
         return
       }
@@ -220,6 +240,14 @@ export default function ProjectDetailPage() {
       {/* Global header renders via RootLayout */}
       
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <div className="mb-4">
+          <Link 
+            href="/projects" 
+            className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center gap-2"
+          >
+            ← Back to Projects
+          </Link>
+        </div>
         <div className="flex justify-end mb-4">
           <button 
             onClick={() => setShowUpload(!showUpload)}
@@ -228,13 +256,13 @@ export default function ProjectDetailPage() {
             {showUpload ? '✕ Cancel' : '+ Upload Audio'}
           </button>
         </div>
-        <div className="bg-white shadow rounded-lg p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Project Details</h2>
+        <div className="bg-white shadow rounded-lg p-6 mb-6 dark:bg-gray-950 dark:border dark:border-gray-800">
+          <h2 className="text-lg font-semibold mb-4 dark:text-gray-100">Project Details</h2>
           <div className="space-y-2">
-            <p className="text-gray-600">
+            <p className="text-gray-600 dark:text-gray-300">
               <span className="font-medium">Type:</span> {project.project_type?.name}
             </p>
-            <p className="text-gray-600">
+            <p className="text-gray-600 dark:text-gray-300">
               <span className="font-medium">Created:</span> {new Date(project.created_at).toLocaleDateString()}
             </p>
           </div>
@@ -242,8 +270,8 @@ export default function ProjectDetailPage() {
 
         {/* Upload Section */}
         {showUpload && (
-          <div className="bg-white shadow rounded-lg p-6 mb-6">
-            <h2 className="text-lg font-semibold mb-4">Upload Audio</h2>
+          <div className="bg-white shadow rounded-lg p-6 mb-6 dark:bg-gray-950 dark:border dark:border-gray-800">
+            <h2 className="text-lg font-semibold mb-4 dark:text-gray-100">Upload Audio</h2>
             <AudioUpload 
               projectId={projectId} 
               onUploadComplete={async () => {
@@ -254,12 +282,12 @@ export default function ProjectDetailPage() {
           </div>
         )}
 
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">Audio Files</h2>
+        <div className="bg-white shadow rounded-lg p-6 dark:bg-gray-950 dark:border dark:border-gray-800">
+          <h2 className="text-lg font-semibold mb-4 dark:text-gray-100">Audio Files</h2>
 
           {audioFiles.length === 0 && !showUpload ? (
             <div className="text-center py-8">
-              <p className="text-gray-600 mb-4">No audio files yet</p>
+              <p className="text-gray-600 mb-4 dark:text-gray-300">No audio files yet</p>
               <button 
               onClick={() => setShowUpload(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
@@ -269,7 +297,7 @@ export default function ProjectDetailPage() {
           ) : (
             <div className="space-y-4">
               {audioFiles.map((file) => (
-                <div key={file.id} className="border border-gray-200 rounded-lg p-4">
+                <div key={file.id} className="border border-gray-200 rounded-lg p-4 dark:border-gray-700">
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex-1">
                       {editingDisplayName === file.id ? (
@@ -278,7 +306,7 @@ export default function ProjectDetailPage() {
                             type="text"
                             value={editingValue}
                             onChange={(e) => setEditingValue(e.target.value)}
-                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
                             onKeyPress={(e) => {
                               if (e.key === 'Enter') handleSaveDisplayName(file.id)
                               if (e.key === 'Escape') handleCancelEdit()
@@ -292,24 +320,24 @@ export default function ProjectDetailPage() {
                           </button>
                           <button
                             onClick={handleCancelEdit}
-                            className="px-3 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400"
+                            className="px-3 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
                           >
                             ✕
                           </button>
                         </div>
                       ) : (
-                        <p className="font-medium cursor-pointer hover:text-blue-600" onClick={() => handleEditDisplayName(file)}>
+                        <p className="font-medium cursor-pointer hover:text-blue-600 dark:text-gray-100 dark:hover:text-blue-400" onClick={() => handleEditDisplayName(file)}>
                           {file.display_name || file.file_name}
                         </p>
                       )}
-                      <p className="text-xs text-gray-400 mt-1">
+                      <p className="text-xs text-gray-400 mt-1 dark:text-gray-400">
                         File name: {file.file_name}
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
                         {(file.file_size_bytes / 1024 / 1024).toFixed(2)} MB
                         {file.duration_seconds && ` • ${Math.floor(file.duration_seconds)}s`}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">
                         Uploaded: {new Date(file.created_at).toLocaleString()}
                       </p>
                     </div>
@@ -336,7 +364,7 @@ export default function ProjectDetailPage() {
                     </div>
                   </div>
                   {transcribingFiles.has(file.id) && (
-                    <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+                    <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700 dark:bg-blue-900 dark:border-blue-700 dark:text-blue-200">
                       <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>

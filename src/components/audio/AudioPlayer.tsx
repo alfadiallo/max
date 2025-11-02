@@ -11,7 +11,22 @@ export default function AudioPlayer({ audioUrl, fileName }: AudioPlayerProps) {
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [isDark, setIsDark] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
+
+  // Check for dark mode on mount and when it changes
+  useEffect(() => {
+    const checkDarkMode = () => {
+      setIsDark(document.documentElement.classList.contains('dark'))
+    }
+    checkDarkMode()
+    
+    // Watch for changes to the dark mode class
+    const observer = new MutationObserver(checkDarkMode)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -86,14 +101,14 @@ export default function AudioPlayer({ audioUrl, fileName }: AudioPlayerProps) {
             max={duration || 0}
             value={currentTime}
             onChange={handleSeek}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
             style={{
-              background: `linear-gradient(to right, #2563eb 0%, #2563eb ${(currentTime / duration) * 100}%, #e5e7eb ${(currentTime / duration) * 100}%, #e5e7eb 100%)`
+              background: `linear-gradient(to right, #2563eb 0%, #2563eb ${(currentTime / duration) * 100}%, ${isDark ? '#374151' : '#e5e7eb'} ${(currentTime / duration) * 100}%, ${isDark ? '#374151' : '#e5e7eb'} 100%)`
             }}
           />
         </div>
 
-        <span className="text-sm text-gray-600 min-w-[80px] text-right">
+        <span className="text-sm text-gray-600 min-w-[80px] text-right dark:text-gray-300">
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
       </div>

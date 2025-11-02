@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { FolderOpen, Sparkles, Search, Bot, FileSearch, Edit3 } from 'lucide-react'
-import ThemeToggle from '@/components/ThemeToggle'
+import { FolderOpen, Sparkles, Search, Bot, FileSearch, Edit3, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
@@ -14,22 +13,28 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function getUser() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-      } else {
-        setUser(user)
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser()
+        if (error) {
+          console.error('Auth error:', error)
+          setLoading(false)
+          router.push('/login')
+        } else if (!user) {
+          router.push('/login')
+        } else {
+          setUser(user)
+          setLoading(false)
+        }
+      } catch (err) {
+        console.error('Unexpected error:', err)
         setLoading(false)
+        router.push('/login')
       }
     }
     getUser()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/')
-  }
 
   if (loading) {
     return (
@@ -39,22 +44,13 @@ export default function DashboardPage() {
     )
   }
 
+  const isAdmin = user?.user_metadata?.role === 'Admin' || user?.user_metadata?.role === 'admin'
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Global header renders via RootLayout */}
       
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-end items-center gap-4 mb-4">
-          <span className="text-sm text-gray-600 dark:text-gray-300">
-            {user?.user_metadata?.full_name || user?.email}
-          </span>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100"
-          >
-            Sign out
-          </button>
-        </div>
         <div className="mt-8">
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -105,6 +101,16 @@ export default function DashboardPage() {
               </h3>
               <p className="text-gray-600 dark:text-gray-300">Review transcription edits and corrections</p>
             </a>
+
+            {isAdmin && (
+              <a href="/admin/users" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800 border-2 border-blue-300 dark:border-blue-500">
+                <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
+                  <Users className="h-5 w-5" />
+                  Manage Users
+                </h3>
+                <p className="text-gray-600 dark:text-gray-300">Invite and manage team members</p>
+              </a>
+            )}
           </div>
         </div>
       </main>

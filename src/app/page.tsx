@@ -12,7 +12,13 @@ export default function Home() {
     async function checkAuth() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        router.push('/dashboard')
+        // Redirect based on user role
+        const userRole = user.user_metadata?.role
+        if (userRole === 'Editor' || userRole === 'editor') {
+          router.push('/projects')
+        } else {
+          router.push('/dashboard')
+        }
       }
     }
     checkAuth()

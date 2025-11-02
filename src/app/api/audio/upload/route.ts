@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // POST /api/audio/upload - Upload audio file to Supabase Storage
 export async function POST(req: NextRequest) {
@@ -26,11 +27,49 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Validate file type
-    const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/webm']
-    if (!allowedTypes.includes(file.type)) {
+    // Validate file type - check both MIME type and file extension
+    const allowedMimeTypes = [
+      // MP3 variations
+      'audio/mpeg',
+      'audio/mp3',
+      'audio/x-mpeg-3',
+      'audio/x-mp3',
+      'audio/x-mpeg',
+      // WAV variations
+      'audio/wav',
+      'audio/wave',
+      'audio/x-wav',
+      'audio/x-pn-wav',
+      // M4A/AAC variations
+      'audio/mp4',
+      'audio/x-m4a',
+      'audio/m4a',
+      'audio/aac',
+      'audio/x-aac',
+      'audio/mp4a-latm',
+      // WebM
+      'audio/webm',
+      'audio/webm;codecs=opus',
+      // Other common audio formats
+      'audio/ogg',
+      'audio/oga',
+      'audio/x-ogg',
+      'audio/flac',
+      'audio/x-flac'
+    ]
+    
+    const allowedExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.webm', '.ogg', '.oga', '.flac']
+    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
+    
+    const isValidMimeType = allowedMimeTypes.includes(file.type.toLowerCase())
+    const isValidExtension = allowedExtensions.includes(fileExtension)
+    
+    if (!isValidMimeType && !isValidExtension) {
       return NextResponse.json(
-        { success: false, error: 'Invalid file type. Supported: MP3, WAV, M4A, WebM' },
+        { 
+          success: false, 
+          error: `Invalid file type. Detected: ${file.type || 'unknown'} (extension: ${fileExtension}). Supported: MP3, WAV, M4A, AAC, WebM, OGG, FLAC` 
+        },
         { status: 400 }
       )
     }
@@ -44,16 +83,27 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Check if user is Editor or Admin
+    const userRole = user.user_metadata?.role
+    const isEditor = userRole === 'Editor' || userRole === 'editor'
+    const isAdmin = userRole === 'Admin' || userRole === 'admin'
+
     // Get project info to determine storage path
-    const { data: project } = await supabase
+    // Editors and Admins can upload to any project, others only to their own
+    let projectQuery = supabase
       .from('max_projects')
       .select(`
         *,
         project_type:max_project_types(*)
       `)
       .eq('id', projectId)
-      .eq('created_by', user.id)
-      .single()
+    
+    // Only filter by created_by if user is not Editor or Admin
+    if (!isEditor && !isAdmin) {
+      projectQuery = projectQuery.eq('created_by', user.id)
+    }
+
+    const { data: project } = await projectQuery.single()
 
     if (!project) {
       return NextResponse.json(
@@ -62,8 +112,26 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Ensure user exists in max_users table (required for foreign key constraint)
+    // Use admin client to bypass RLS since there's no INSERT policy for max_users
+    const adminClient = createAdminClient()
+    const { error: userSyncError } = await adminClient
+      .from('max_users')
+      .upsert({
+        id: user.id,
+        email: user.email || '',
+        full_name: user.user_metadata?.full_name || null,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'id'
+      })
+
+    if (userSyncError) {
+      console.error('Error syncing user to max_users:', userSyncError)
+      // Continue anyway - might already exist or RLS might allow it
+    }
+
     // Generate file path
-    const fileExtension = file.name.split('.').pop()
     const fileName = `${Date.now()}-${file.name}`
     const storagePath = `audio/${project.project_type.slug}/${fileName}`
 

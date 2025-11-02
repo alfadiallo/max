@@ -23,6 +23,19 @@ export default function Breadcrumbs() {
   const [dynamicTitles, setDynamicTitles] = useState<Record<string, string>>({})
   const supabase = createClient()
 
+  const [user, setUser] = useState<any>(null)
+  
+  useEffect(() => {
+    async function getUser() {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+    }
+    getUser()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  
+  const isEditor = user?.user_metadata?.role === 'Editor' || user?.user_metadata?.role === 'editor'
+
   const segments = useMemo(() => {
     const path = pathname || '/'
     return path.split('/').filter(Boolean)
@@ -59,13 +72,20 @@ export default function Breadcrumbs() {
           hrefAcc += '/' + seg
           const isLast = idx === segments.length - 1
           const label = dynamicTitles[seg] || titleForSegment(seg)
+          
+          // For Editors, replace "dashboard" with "projects" in breadcrumbs
+          let href = hrefAcc
+          if (isEditor && seg === 'dashboard') {
+            href = '/projects'
+          }
+          
           return (
             <li key={hrefAcc} className="flex items-center gap-2">
               {idx > 0 && <span className="opacity-60">/</span>}
               {isLast ? (
                 <span className="font-medium text-gray-900 dark:text-gray-100">{label}</span>
               ) : (
-                <Link href={hrefAcc} className="hover:underline">
+                <Link href={href} className="hover:underline">
                   {label}
                 </Link>
               )}
