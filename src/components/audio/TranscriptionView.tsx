@@ -256,18 +256,22 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       }
       
       // Collect actual edits made during this session (only segments user explicitly changed)
+      // Compute minimal text diff to show only what changed, not the entire segment
       const actualEdits: any[] = []
       editedSegmentIndices.forEach(idx => {
         const editedSeg = editingSegments[idx]
         const initialSeg = initialSegments[idx]
-        if (editedSeg && initialSeg) {
+        if (editedSeg && initialSeg && editedSeg.text !== initialSeg.text) {
+          // Compute the minimal diff (only the changed words)
+          const diff = computeTextDiff(initialSeg.text, editedSeg.text, 2)
+          
           actualEdits.push({
-            original_text: initialSeg.text,
-            corrected_text: editedSeg.text,
+            original_text: diff.original_text || initialSeg.text, // Fallback to full text if diff is empty
+            corrected_text: diff.corrected_text || editedSeg.text,
             position_start: editedSeg.start,
             position_end: editedSeg.end,
-            context_before: '',
-            context_after: ''
+            context_before: diff.context_before,
+            context_after: diff.context_after
           })
         }
       })
