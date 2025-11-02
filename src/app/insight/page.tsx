@@ -250,18 +250,12 @@ function InsightPageContent() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Global header renders via RootLayout */}
       <div className="mb-6">
-        <div className="flex justify-between items-start mb-2">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Insights</h1>
-            <a href="/dashboard" className="text-gray-600 hover:text-gray-900 mt-2 inline-block">
-              ← Back to Dashboard
-            </a>
-            <p className="text-gray-600 mt-2">Transcript parsing and data management</p>
-          </div>
+        <div className="flex justify-end">
           <a 
             href="/insight/search" 
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium dark:bg-blue-500 dark:hover:bg-blue-600"
           >
             🔍 Search Transcripts
           </a>

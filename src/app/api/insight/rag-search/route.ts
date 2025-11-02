@@ -66,8 +66,10 @@ export async function POST(request: Request) {
           .single()
 
         if (transcription?.audio) {
-          audioFileName = transcription.audio.display_name || transcription.audio.file_name
-          projectName = transcription.audio.project?.name
+          const audio: any = Array.isArray(transcription.audio) ? transcription.audio[0] : transcription.audio
+          const project: any = Array.isArray(audio?.project) ? audio?.project[0] : audio?.project
+          audioFileName = audio?.display_name || audio?.file_name
+          projectName = project?.name || null
         }
       }
 

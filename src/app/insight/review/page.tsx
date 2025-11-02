@@ -107,13 +107,7 @@ export default function ContentReviewPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Content Review</h1>
-        <a href="/dashboard" className="text-gray-600 hover:text-gray-900 mt-2 inline-block">
-          ← Back to Dashboard
-        </a>
-        <p className="text-gray-600 mt-2">Review and approve generated marketing content</p>
-      </div>
+      {/* Global header renders via RootLayout */}
 
       {/* Filter Tabs */}
       <div className="mb-6 flex gap-2 border-b border-gray-200">

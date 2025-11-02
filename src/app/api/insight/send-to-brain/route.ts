@@ -241,7 +241,7 @@ Extract metadata and return ONLY a JSON object with this exact structure:
     }
 
     // Update tags from metadata
-    const tagInserts = []
+    const tagInserts: Array<{ insight_transcript_id: string; tag_type: string; tag_value: string }> = []
     if (extractedMetadata.procedures_discussed) {
       extractedMetadata.procedures_discussed.forEach((tag: string) => {
         tagInserts.push({

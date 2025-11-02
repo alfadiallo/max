@@ -130,14 +130,7 @@ export default function InsightSearchPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Search Transcripts</h1>
-        <Link href="/dashboard" className="text-gray-600 hover:text-gray-900 inline-block mb-4">
-          ← Back to Dashboard
-        </Link>
-        <p className="text-gray-600">Search across all your transcripts using exact text matching</p>
-      </div>
+      {/* Global header renders via RootLayout */}
 
       {/* Search Bar */}
       <div className="mb-6">

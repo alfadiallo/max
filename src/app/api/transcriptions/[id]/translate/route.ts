@@ -131,10 +131,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     // Parse segmented translation (format: [start-end] text)
     let translatedSegments: any[] = []
-    const lines = translatedText.split('\n').filter(line => line.trim())
+    const lines = translatedText.split('\n').filter((line: string) => line.trim())
     
     let parsedCount = 0
-    lines.forEach((line) => {
+    lines.forEach((line: string) => {
       const timestampMatch = line.match(/\[(\d+\.?\d*)-(\d+\.?\d*)\]\s*(.*)/)
       if (timestampMatch) {
         const [, start, end, text] = timestampMatch
@@ -153,13 +153,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // If parsing failed or not enough segments, fall back to splitting by English segments
     if (translatedSegments.length !== segments.length) {
       // Split translation into approximately equal parts based on English segments
-      const englishWords = segments.map(seg => seg.text).join(' ').split(' ')
+      const englishWords = segments.map((seg: any) => seg.text).join(' ').split(' ')
       const translationWords = translatedText.split(' ')
       const wordRatio = translationWords.length / englishWords.length
       
-      translatedSegments = segments.map((seg, idx) => {
+      translatedSegments = segments.map((seg: any, idx: number) => {
         // Try to find corresponding translation segment
-        const existingSegment = translatedSegments.find(ts => 
+        const existingSegment = translatedSegments.find((ts: any) => 
           Math.abs(ts.start - seg.start) < 0.5 && Math.abs(ts.end - seg.end) < 0.5
         )
         
@@ -170,7 +170,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         // If no match, try to extract from full text based on word counts
         const segmentWords = seg.text.split(' ')
         const segmentWordCount = segmentWords.length
-        const startWordIdx = segments.slice(0, idx).reduce((sum, s) => sum + s.text.split(' ').length, 0)
+        const startWordIdx = segments.slice(0, idx).reduce((sum: number, s: any) => sum + s.text.split(' ').length, 0)
         const endWordIdx = startWordIdx + segmentWordCount
         
         const translatedTextPortion = translationWords.slice(

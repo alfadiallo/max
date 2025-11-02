@@ -1287,6 +1287,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                 } else if (transcription.versions?.some(v => v.id === finalVersion)) {
                   // Final is a version
                   const version = transcription.versions.find(v => v.id === finalVersion)
+                  if (!version) return null
                   finalVersionObj = {
                     id: finalVersion,
                     type: version.version_type,
@@ -1524,6 +1525,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                         }
                       } else if (finalVersion && transcription.versions?.some(v => v.id === finalVersion)) {
                         const version = transcription.versions.find(v => v.id === finalVersion)
+                        if (!version) return null
                         finalVersionObj = {
                           id: finalVersion,
                           type: version.version_type,

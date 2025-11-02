@@ -216,27 +216,18 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-start py-4">
-            <div>
-              <h1 className="text-2xl font-bold">{project.name}</h1>
-              <Link href="/projects" className="text-gray-600 hover:text-gray-900 mt-1 inline-block">
-                ← Back to Projects
-              </Link>
-            </div>
-            <button 
-              onClick={() => setShowUpload(!showUpload)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              {showUpload ? '✕ Cancel' : '+ Upload Audio'}
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Global header renders via RootLayout */}
       
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-end mb-4">
+          <button 
+            onClick={() => setShowUpload(!showUpload)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+          >
+            {showUpload ? '✕ Cancel' : '+ Upload Audio'}
+          </button>
+        </div>
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-lg font-semibold mb-4">Project Details</h2>
           <div className="space-y-2">

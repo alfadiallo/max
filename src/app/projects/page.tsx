@@ -69,31 +69,22 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-start py-4">
-            <div>
-              <h1 className="text-2xl font-bold">Projects</h1>
-              <Link href="/dashboard" className="text-gray-600 hover:text-gray-900 mt-1 inline-block">
-                ← Back to Dashboard
-              </Link>
-            </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              + New Project
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Global header renders via RootLayout */}
       
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+          >
+            + New Project
+          </button>
+        </div>
         {projects.length === 0 ? (
-          <div className="bg-white shadow rounded-lg p-8 text-center">
-            <h2 className="text-xl font-semibold mb-4">No projects yet</h2>
-            <p className="text-gray-600 mb-6">Upload your first audio to get started.</p>
+          <div className="bg-white shadow rounded-lg p-8 text-center dark:bg-gray-950 dark:border dark:border-gray-800">
+            <h2 className="text-xl font-semibold mb-4 dark:text-gray-100">No projects yet</h2>
+            <p className="text-gray-600 mb-6 dark:text-gray-300">Upload your first audio to get started.</p>
             <button
               onClick={() => setShowCreateModal(true)}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -104,9 +95,9 @@ export default function ProjectsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map((project) => (
-              <div key={project.id} className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition">
-                <h3 className="text-lg font-semibold mb-2">{project.name}</h3>
-                <p className="text-sm text-gray-600 mb-4">{project.project_type?.name || 'Unknown'}</p>
+              <div key={project.id} className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800">
+                <h3 className="text-lg font-semibold mb-2 dark:text-gray-100">{project.name}</h3>
+                <p className="text-sm text-gray-600 mb-4 dark:text-gray-300">{project.project_type?.name || 'Unknown'}</p>
                 <Link
                   href={`/projects/${project.id}`}
                   className="text-blue-600 hover:text-blue-700"

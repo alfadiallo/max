@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { UploadCloud } from 'lucide-react'
 
 interface AudioUploadProps {
   projectId: string
@@ -53,10 +54,8 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true)
-    } else if (e.type === 'dragleave') {
-      setDragActive(false)
+    if (e.type === 'dragenter' || e.type === 'dragleave' || e.type === 'dragover') {
+      setDragActive(e.type !== 'dragleave')
     }
   }
 
@@ -77,7 +76,7 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
   }
 
   return (
-    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
+    <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-8">
       <input
         ref={fileInputRef}
         type="file"
@@ -85,34 +84,31 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
         onChange={handleFileSelect}
         className="hidden"
       />
-      
       {uploading ? (
         <div className="text-center">
-          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+          <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2.5 mb-4">
             <div
               className="bg-blue-600 h-2.5 rounded-full transition-all"
               style={{ width: `${uploadProgress}%` }}
             />
           </div>
-          <p className="text-sm text-gray-600">Uploading... {uploadProgress}%</p>
+          <p className="text-sm text-gray-600 dark:text-gray-300">Uploading... {uploadProgress}%</p>
         </div>
       ) : (
         <div
-          className="text-center cursor-pointer"
+          className={`text-center cursor-pointer ${dragActive ? 'opacity-80' : ''}`}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
         >
-          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
+          <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
           <div className="mt-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
               <span className="font-medium text-blue-600 hover:text-blue-500">Click to upload</span> or drag and drop
             </p>
-            <p className="text-xs text-gray-500 mt-2">MP3, WAV, M4A, WebM (max 500MB)</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">MP3, WAV, M4A, WebM (max 500MB)</p>
           </div>
         </div>
       )}

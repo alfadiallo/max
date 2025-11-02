@@ -142,28 +142,25 @@ export async function POST(req: NextRequest) {
     try {
       const response = await elevenlabsClient.textToSpeech.convert(voiceId, {
         text: textToSynthesize,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: {
+        modelId: 'eleven_multilingual_v2',
+        voiceSettings: {
           stability: 0.5,
-          similarity_boost: 0.5,
+          similarityBoost: 0.5,
           style: 0.0,
-          use_speaker_boost: true
+          useSpeakerBoost: true
         }
       })
       
       console.log('Received response from ElevenLabs')
       console.log('Response type:', typeof response)
-      console.log('Response constructor:', response.constructor.name)
-      console.log('Response keys:', Object.keys(response || {}))
-      console.log('Response.body exists:', !!response.body)
-      console.log('Response.body type:', typeof response.body)
+      console.log('Response constructor:', (response as any)?.constructor?.name)
       
       // The response IS the readable stream based on ElevenLabs SDK
-      if (response && typeof response.getReader === 'function') {
-        audioStream = response as ReadableStream<Uint8Array>
+      if (response && typeof (response as any).getReader === 'function') {
+        audioStream = response as unknown as ReadableStream<Uint8Array>
         console.log('Response is directly a ReadableStream')
-      } else if (response.body && typeof response.body.getReader === 'function') {
-        audioStream = response.body as ReadableStream<Uint8Array>
+      } else if ((response as any).body && typeof (response as any).body.getReader === 'function') {
+        audioStream = (response as any).body as ReadableStream<Uint8Array>
         console.log('Response has a body that is a ReadableStream')
       } else {
         console.error('Unexpected response structure:', response)

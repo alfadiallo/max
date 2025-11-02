@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     // Get the metadata to use for semantic boundaries
     const { data: metadata } = await supabase
       .from('insight_metadata')
-      .select('procedures_discussed, key_concepts, learning_objectives')
+      .select('procedures_discussed, key_concepts, learning_objectives, products_or_tools')
       .eq('insight_transcript_id', insightTranscript.id)
       .single()
 

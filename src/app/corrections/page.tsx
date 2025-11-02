@@ -66,18 +66,9 @@ export default function CorrectionsDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-gray-50 p-8 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <Link href="/dashboard" className="text-blue-600 hover:text-blue-800 mb-4 inline-block">
-            ← Back to Dashboard
-          </Link>
-          <h1 className="text-3xl font-bold text-gray-900">Transcription Corrections</h1>
-          <p className="text-gray-600 mt-2">
-            Review all word-level edits made to your transcriptions
-          </p>
-        </div>
+        {/* Global header renders via RootLayout */}
 
         {/* Filter */}
         <div className="mb-6 bg-white p-4 rounded-lg shadow">

@@ -66,8 +66,15 @@ export async function GET(req: NextRequest) {
         return []
       }
 
-      const audioFile = version.transcription?.audio
-      const isFinal = version.transcription?.final_version_id === version.id
+      // Unwrap nested relations that may be returned as arrays by PostgREST
+      const transcriptionRel: any = Array.isArray((version as any).transcription)
+        ? (version as any).transcription[0]
+        : (version as any).transcription
+      const audioRel: any = transcriptionRel?.audio
+      const audioFile: any = Array.isArray(audioRel) ? audioRel[0] : audioRel
+      const projectRel: any = audioFile?.project
+      const project: any = Array.isArray(projectRel) ? projectRel[0] : projectRel
+      const isFinal = transcriptionRel?.final_version_id === version.id
       
       return (version.dictionary_corrections_applied as any[]).map((edit, index) => ({
         id: `${version.id}-${index}`,
@@ -79,7 +86,7 @@ export async function GET(req: NextRequest) {
         audio_file_id: audioFile?.id,
         audio_file_name: audioFile?.file_name,
         audio_display_name: audioFile?.display_name || audioFile?.file_name,
-        project_name: audioFile?.project?.name,
+        project_name: project?.name,
         original_text: edit.original_text,
         corrected_text: edit.corrected_text,
         context_before: edit.context_before,

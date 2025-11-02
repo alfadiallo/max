@@ -49,7 +49,9 @@ export async function GET() {
         .eq('id', transcript.transcription_id)
         .single()
 
-      if (transcription?.audio?.project?.created_by === user.id) {
+      const audio: any = Array.isArray(transcription?.audio) ? transcription?.audio[0] : transcription?.audio
+      const project: any = Array.isArray(audio?.project) ? audio?.project[0] : audio?.project
+      if (project?.created_by === user.id) {
         // Get metadata separately (join returns array but should be one-to-one)
         const metadata = Array.isArray(transcript.metadata) && transcript.metadata.length > 0 
           ? transcript.metadata[0] 
@@ -59,8 +61,8 @@ export async function GET() {
         userTranscripts.push({
           ...transcript,
           metadata,
-          project_name: transcription.audio.project.name,
-          audio_file_name: transcription.audio.file_name
+          project_name: project?.name,
+          audio_file_name: audio?.file_name
         })
       }
     }

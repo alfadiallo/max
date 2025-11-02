@@ -71,16 +71,18 @@ export async function GET(request: Request) {
         .single()
 
       // Only include chunks from user's own projects
-      if (transcription?.audio?.project?.created_by === user.id) {
+      const audio: any = Array.isArray(transcription?.audio) ? transcription?.audio[0] : transcription?.audio
+      const project: any = Array.isArray(audio?.project) ? audio?.project[0] : audio?.project
+      if (project?.created_by === user.id) {
         enrichedChunks.push({
           ...chunk,
           insight_transcripts: {
             transcription_id: insightTranscript.transcription_id,
             transcription: {
               audio: {
-                file_name: transcription.audio.file_name,
+                file_name: audio?.file_name,
                 project: {
-                  name: transcription.audio.project.name
+                  name: project?.name
                 }
               }
             }
