@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ANALYSIS_USER_PROMPT } from '@/lib/prompts/transcription-analysis'
+import { computeTextDiff } from '@/lib/utils/textDiff'
 
 interface Transcription {
   id: string
