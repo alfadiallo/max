@@ -81,18 +81,14 @@ export async function POST(req: NextRequest) {
     const adminClient = createAdminClient()
 
     // Find the H-1 version for this audio file
+    // First get all H-1 versions
     const { data: versions, error: fetchError } = await adminClient
       .from('max_transcription_versions')
       .select(`
         id,
         version_type,
         dictionary_corrections_applied,
-        transcription:max_transcriptions(
-          audio:max_audio_files(
-            file_name,
-            display_name
-          )
-        )
+        transcription_id
       `)
       .eq('version_type', 'H-1')
 
@@ -100,13 +96,45 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: fetchError.message }, { status: 500 })
     }
 
+    if (!versions || versions.length === 0) {
+      return NextResponse.json({ success: false, error: 'No H-1 versions found' }, { status: 404 })
+    }
+
+    // For each version, get the transcription and audio file info
+    const versionsWithAudio = await Promise.all(
+      versions.map(async (version: any) => {
+        // Get transcription
+        const { data: transcription } = await adminClient
+          .from('max_transcriptions')
+          .select(`
+            id,
+            audio_file_id,
+            audio:max_audio_files(
+              file_name,
+              display_name
+            )
+          `)
+          .eq('id', version.transcription_id)
+          .single()
+
+        return {
+          ...version,
+          transcription
+        }
+      })
+    )
+
     // Find the version for the specified audio file
-    const targetVersion = versions?.find((v: any) => {
-      const transcription = Array.isArray(v.transcription) ? v.transcription[0] : v.transcription
-      const audio = transcription?.audio
+    const targetVersion = versionsWithAudio.find((v: any) => {
+      const transcription = v.transcription
+      if (!transcription) return false
+      
+      const audio = transcription.audio
       const audioFile = Array.isArray(audio) ? audio[0] : audio
-      const fileName = audioFile?.file_name || ''
-      const displayName = audioFile?.display_name || ''
+      if (!audioFile) return false
+      
+      const fileName = audioFile.file_name || ''
+      const displayName = audioFile.display_name || ''
       return fileName.includes(audio_file_name) || displayName.includes(audio_file_name) ||
              fileName.includes('#2 Intro') || displayName.includes('#2 Intro')
     })
