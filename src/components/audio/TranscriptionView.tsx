@@ -993,6 +993,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                     }
                     
                     // T-1 goes at bottom
+                    // Allow editing T-1 if there are no H-versions yet (to create the first one)
+                    const canEditT1 = hVersions.length === 0
                     const allVersions = [
                       ...hVersions, // H versions in reverse chronological order (latest first)
                       {
@@ -1004,14 +1006,14 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                         segments: transcription.json_with_timestamps?.segments || [],
                         metadata: metadata,
                         corrections_applied: [], // T-1 has no edits (it's the original)
-                        isLatest: false,
-                        canEdit: false
+                        isLatest: hVersions.length === 0, // T-1 is "latest" if no H-versions exist
+                        canEdit: canEditT1 // Allow editing T-1 to create first H-version
                       }
                     ]
                     
-                    // Helper functions for collapse/expand - find the latest H version
-                    const latestHVersion = allVersions.find(v => v.isLatest)
-                    const latestVersionId = latestHVersion?.id || allVersions[0]?.id // Fallback to first version if no latest
+                    // Helper functions for collapse/expand - find the latest version (H version or T-1)
+                    const latestVersion = allVersions.find(v => v.isLatest)
+                    const latestVersionId = latestVersion?.id || allVersions[0]?.id // Fallback to first version if no latest
                     const isExpanded = (versionId: string) => {
                       if (expandedVersions.size === 0) {
                         // Default: expand the latest version (or first if no H versions exist)
