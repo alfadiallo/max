@@ -30,10 +30,20 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
         body: formData
       })
 
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        console.error('Server returned non-JSON response:', text.substring(0, 500))
+        throw new Error(`Upload failed: Server returned ${response.status} ${response.statusText}`)
+      }
+
       const result = await response.json()
 
       if (!result.success) {
-        throw new Error(result.error || 'Upload failed')
+        const errorMsg = result.error || 'Upload failed'
+        const details = result.details ? ` (${result.details})` : ''
+        throw new Error(errorMsg + details)
       }
 
       // Simulate progress

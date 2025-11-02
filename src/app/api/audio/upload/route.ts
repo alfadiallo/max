@@ -103,12 +103,21 @@ export async function POST(req: NextRequest) {
       projectQuery = projectQuery.eq('created_by', user.id)
     }
 
-    const { data: project } = await projectQuery.single()
+    const { data: project, error: projectError } = await projectQuery.single()
 
-    if (!project) {
+    if (projectError || !project) {
+      console.error('Project query error:', projectError)
       return NextResponse.json(
-        { success: false, error: 'Project not found' },
+        { success: false, error: 'Project not found or access denied' },
         { status: 404 }
+      )
+    }
+
+    // Check if project_type exists
+    if (!project.project_type || !project.project_type.slug) {
+      return NextResponse.json(
+        { success: false, error: 'Project type not found. Please assign a project type to this project.' },
+        { status: 400 }
       )
     }
 
