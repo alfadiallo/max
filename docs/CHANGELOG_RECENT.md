@@ -1,6 +1,24 @@
-# Recent Changes - Editor Access & File Upload Improvements
+# Recent Changes - Editor Access, File Upload, & Corrections Display
 
 ## Date: Latest Session
+
+### 🔧 Latest Fix: Corrections Display Optimization
+
+#### Corrections Show Minimal Diff Instead of Full Segments
+- **Problem**: Corrections page showed entire segment text even for single-word corrections (e.g., "Carla" → "Karla" showed the entire sentence)
+- **Solution**:
+  - Created `src/lib/utils/textDiff.ts` utility to compute minimal text differences
+  - Updated `TranscriptionView.tsx` to use `computeTextDiff` when saving new versions
+  - Created admin API endpoint `/api/admin/fix-corrections` to reprocess existing corrections
+  - Fixed relationship ambiguity in Supabase queries by using separate queries instead of nested selects
+- **Result**: Corrections now show only changed words with context (2 words before/after by default)
+- **Files**:
+  - `src/lib/utils/textDiff.ts` - New utility for computing minimal diffs
+  - `src/components/audio/TranscriptionView.tsx` - Updated to use text diff when saving
+  - `src/app/api/admin/fix-corrections/route.ts` - Admin endpoint to fix existing corrections
+  - `docs/FIX_CORRECTIONS_INSTRUCTIONS.md` - Instructions for using the fix endpoint
+
+### 🔧 Previous Fixes
 
 ### 🔧 Fixed Issues
 
@@ -40,6 +58,12 @@
   - Regular users can only upload to their own projects
 
 ### 📝 Files Modified
+
+#### New Files
+- `src/lib/utils/textDiff.ts` - Text diffing utility for minimal corrections display
+- `src/app/api/admin/fix-corrections/route.ts` - Admin API to reprocess corrections
+- `docs/FIX_CORRECTIONS_INSTRUCTIONS.md` - Instructions for fixing corrections
+- `sql/fix-corrections-for-audio.sql` - SQL helper for manual corrections fix
 
 #### Frontend Components
 - `src/components/Header.tsx` - Global user profile popup, auth state listener
