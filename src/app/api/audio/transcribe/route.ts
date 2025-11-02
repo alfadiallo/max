@@ -34,6 +34,27 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Get the original file name to preserve extension
+    const { data: audioFileRecord, error: fileError } = await supabase
+      .from('max_audio_files')
+      .select('file_name')
+      .eq('id', audio_file_id)
+      .single()
+
+    if (fileError || !audioFileRecord) {
+      console.error('Error fetching audio file record:', fileError)
+      // Continue with default extension if we can't get the file name
+    }
+
+    // Extract file extension from original file name, or default to .mp3
+    let fileExtension = '.mp3'
+    if (audioFileRecord?.file_name) {
+      const parts = audioFileRecord.file_name.split('.')
+      if (parts.length > 1) {
+        fileExtension = '.' + parts[parts.length - 1].toLowerCase()
+      }
+    }
+
     // Download audio file from Supabase Storage
     const audioResponse = await fetch(audio_url)
     if (!audioResponse.ok) {
@@ -44,7 +65,8 @@ export async function POST(req: NextRequest) {
     }
 
     const audioBlob = await audioResponse.blob()
-    const audioFile = new File([audioBlob], `audio-${audio_file_id}.mp3`, { type: audioBlob.type })
+    // Use the original file extension so OpenAI can detect the format correctly
+    const audioFile = new File([audioBlob], `audio-${audio_file_id}${fileExtension}`, { type: audioBlob.type })
 
     // Initialize OpenAI client
     const openai = new OpenAI({ apiKey: OPENAI_API_KEY })
