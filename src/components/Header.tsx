@@ -21,14 +21,20 @@ export function Header() {
       try {
         const { data: { user }, error } = await supabase.auth.getUser()
         if (error) {
-          console.error('Error getting user:', error)
+          // Suppress AuthSessionMissingError - it's expected during SSR/initial load
+          if (error.name !== 'AuthSessionMissingError') {
+            console.error('Error getting user:', error)
+          }
           setUser(null)
         } else {
           setUser(user)
         }
         setLoading(false)
-      } catch (err) {
-        console.error('Error in getUser:', err)
+      } catch (err: any) {
+        // Suppress AuthSessionMissingError - it's expected during SSR/initial load
+        if (err?.name !== 'AuthSessionMissingError') {
+          console.error('Error in getUser:', err)
+        }
         setUser(null)
         setLoading(false)
       }
