@@ -100,47 +100,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'No H-1 versions found' }, { status: 404 })
     }
 
-    // For each version, get the transcription and audio file info
+    // For each version, get the transcription and audio file info separately to avoid relationship ambiguity
     const versionsWithAudio = await Promise.all(
       versions.map(async (version: any) => {
-        // Get transcription - use explicit foreign key
+        // Get transcription
         const { data: transcription } = await adminClient
           .from('max_transcriptions')
-          .select(`
-            id,
-            audio_file_id,
-            audio_file_id:max_audio_files!audio_file_id(
-              file_name,
-              display_name
-            )
-          `)
+          .select('id, audio_file_id')
           .eq('id', version.transcription_id)
+          .single()
+
+        if (!transcription) {
+          return { ...version, transcription: null, audio: null }
+        }
+
+        // Get audio file separately
+        const { data: audioFile } = await adminClient
+          .from('max_audio_files')
+          .select('file_name, display_name')
+          .eq('id', transcription.audio_file_id)
           .single()
 
         return {
           ...version,
-          transcription: transcription ? {
-            ...transcription,
-            audio: transcription.audio_file_id // Rename for consistency
-          } : null
+          transcription,
+          audio: audioFile
         }
       })
     )
 
     // Find the version for the specified audio file
     const targetVersion = versionsWithAudio.find((v: any) => {
-      const transcription = v.transcription
-      if (!transcription) return false
+      if (!v.audio) return false
       
-      const audioFile = transcription.audio
-      if (!audioFile) return false
-      
-      // Handle both single object and array
-      const audio = Array.isArray(audioFile) ? audioFile[0] : audioFile
-      if (!audio) return false
-      
-      const fileName = audio.file_name || ''
-      const displayName = audio.display_name || ''
+      const fileName = v.audio.file_name || ''
+      const displayName = v.audio.display_name || ''
       return fileName.includes(audio_file_name) || displayName.includes(audio_file_name) ||
              fileName.includes('#2 Intro') || displayName.includes('#2 Intro')
     })
