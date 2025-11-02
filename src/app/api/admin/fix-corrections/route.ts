@@ -61,10 +61,32 @@ function computeTextDiff(original: string, corrected: string, contextWords: numb
 
 export async function POST(req: NextRequest) {
   try {
+    // Parse request body with error handling
+    let body
+    try {
+      body = await req.json()
+    } catch (parseError: any) {
+      console.error('Failed to parse request body:', parseError)
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON in request body' },
+        { status: 400 }
+      )
+    }
+
+    const { audio_file_name } = body || {}
+    
+    if (!audio_file_name) {
+      return NextResponse.json(
+        { success: false, error: 'audio_file_name is required' },
+        { status: 400 }
+      )
+    }
+
     const supabase = await createClient()
     const { data: { user }, error: userError } = await supabase.auth.getUser()
     
     if (!user || userError) {
+      console.error('Auth error:', userError)
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -73,9 +95,6 @@ export async function POST(req: NextRequest) {
     if (userRole !== 'Admin' && userRole !== 'admin') {
       return NextResponse.json({ success: false, error: 'Forbidden: Admin role required' }, { status: 403 })
     }
-
-    const body = await req.json()
-    const { audio_file_name } = body // e.g., "#2 Intro to the software and tools.m4a"
 
     // Use admin client to bypass RLS
     const adminClient = createAdminClient()
@@ -193,8 +212,17 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error('Error fixing corrections:', error)
+    console.error('Error type:', typeof error)
+    console.error('Error stack:', error?.stack)
+    
+    // Ensure we always return JSON, never HTML
+    const errorMessage = error?.message || error?.toString() || 'Failed to fix corrections'
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to fix corrections' },
+      { 
+        success: false, 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? error?.stack : undefined
+      },
       { status: 500 }
     )
   }

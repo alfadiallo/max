@@ -13,25 +13,39 @@
 3. **Paste this code in the console and press Enter:**
 
 ```javascript
-fetch('/api/admin/fix-corrections', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ audio_file_name: "#2 Intro to the software and tools.m4a" })
-})
-.then(r => r.json())
-.then(result => {
-  console.log('Result:', result)
-  if (result.success) {
-    alert(`✅ Fixed ${result.data.corrections_fixed} corrections!`)
-  } else {
-    alert(`❌ Error: ${result.error}`)
+// Better version with error handling
+async function fixCorrections() {
+  try {
+    const response = await fetch('/api/admin/fix-corrections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio_file_name: "#2 Intro to the software and tools.m4a" })
+    })
+    
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type')
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text()
+      console.error('Server returned non-JSON:', text.substring(0, 500))
+      alert(`Error: Server returned ${response.status}. Check console.`)
+      return
+    }
+    
+    const result = await response.json()
+    if (result.success) {
+      alert(`✅ Fixed ${result.data.corrections_fixed} corrections!`)
+    } else {
+      alert(`❌ Error: ${result.error}`)
+    }
+  } catch (error) {
+    console.error('Error:', error)
+    alert(`Failed: ${error.message}`)
   }
-})
-.catch(error => {
-  console.error('Error:', error)
-  alert('Failed to fix corrections. Check console for details.')
-})
+}
+fixCorrections()
 ```
+
+**Or use the improved version from `FIX_CORRECTIONS_DEBUG.js` file for better debugging.**
 
 4. **Check the console output**
    - You should see a success message
