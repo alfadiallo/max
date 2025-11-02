@@ -103,13 +103,13 @@ export async function POST(req: NextRequest) {
     // For each version, get the transcription and audio file info
     const versionsWithAudio = await Promise.all(
       versions.map(async (version: any) => {
-        // Get transcription
+        // Get transcription - use explicit foreign key
         const { data: transcription } = await adminClient
           .from('max_transcriptions')
           .select(`
             id,
             audio_file_id,
-            audio:max_audio_files(
+            audio_file_id:max_audio_files!audio_file_id(
               file_name,
               display_name
             )
@@ -119,7 +119,10 @@ export async function POST(req: NextRequest) {
 
         return {
           ...version,
-          transcription
+          transcription: transcription ? {
+            ...transcription,
+            audio: transcription.audio_file_id // Rename for consistency
+          } : null
         }
       })
     )
@@ -129,12 +132,15 @@ export async function POST(req: NextRequest) {
       const transcription = v.transcription
       if (!transcription) return false
       
-      const audio = transcription.audio
-      const audioFile = Array.isArray(audio) ? audio[0] : audio
+      const audioFile = transcription.audio
       if (!audioFile) return false
       
-      const fileName = audioFile.file_name || ''
-      const displayName = audioFile.display_name || ''
+      // Handle both single object and array
+      const audio = Array.isArray(audioFile) ? audioFile[0] : audioFile
+      if (!audio) return false
+      
+      const fileName = audio.file_name || ''
+      const displayName = audio.display_name || ''
       return fileName.includes(audio_file_name) || displayName.includes(audio_file_name) ||
              fileName.includes('#2 Intro') || displayName.includes('#2 Intro')
     })
