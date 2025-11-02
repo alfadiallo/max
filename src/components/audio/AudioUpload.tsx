@@ -21,6 +21,20 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
     setUploadProgress(0)
 
     try {
+      // Validate file type
+      const allowedExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.webm', '.ogg', '.oga', '.flac']
+      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
+      
+      if (!allowedExtensions.includes(fileExtension)) {
+        throw new Error(`Invalid file type: ${fileExtension}. Supported: MP3, WAV, M4A, AAC, WebM, OGG, FLAC`)
+      }
+
+      // Validate file size (500MB max)
+      const maxSize = 500 * 1024 * 1024 // 500MB
+      if (file.size > maxSize) {
+        throw new Error('File too large. Max size: 500MB')
+      }
+
       // Get project info first to determine storage path
       const { data: project, error: projectError } = await supabase
         .from('max_projects')
