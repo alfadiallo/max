@@ -129,7 +129,7 @@ export default function SonixImportPage() {
   }
 
   const handleSelectAll = () => {
-    const notImported = media.filter(m => !m.imported && m.status === 'completed')
+    const notImported = (media || []).filter(m => !m.imported && m.status === 'completed')
     if (selectedMedia.size === notImported.length) {
       setSelectedMedia(new Set())
     } else {
