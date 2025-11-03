@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import OpenAI from 'openai'
-import { compressAudioServer } from '@/lib/utils/serverAudioCompression'
 
 // POST /api/audio/transcribe - Transcribe audio file using OpenAI Whisper
 export async function POST(req: NextRequest) {
