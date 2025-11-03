@@ -156,20 +156,21 @@ export default function SonixImportPage() {
         })
       })
 
+      // Read response as text first (body can only be read once)
+      const responseText = await response.text()
+      
       // Check if response is JSON
       const contentType = response.headers.get('content-type')
       let result: any
       
       if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text()
-        throw new Error(`Server returned ${response.status} ${response.statusText}. ${text.substring(0, 200)}`)
+        throw new Error(`Server returned ${response.status} ${response.statusText}. ${responseText.substring(0, 200)}`)
       }
 
       try {
-        result = await response.json()
-      } catch (parseError) {
-        const text = await response.text().catch(() => 'Unable to read response')
-        throw new Error(`Failed to parse server response (${response.status}): ${text.substring(0, 200)}`)
+        result = JSON.parse(responseText)
+      } catch (parseError: any) {
+        throw new Error(`Failed to parse server response (${response.status}): ${responseText.substring(0, 200)}`)
       }
 
       if (!result) {
