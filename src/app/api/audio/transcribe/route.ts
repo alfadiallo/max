@@ -154,8 +154,26 @@ export async function POST(req: NextRequest) {
           )
         }
       } catch (compressionError: any) {
-        console.error('Server-side compression failed:', compressionError)
-        // If compression fails, return error (don't try with original file)
+        console.error('❌ Server-side compression failed:', compressionError)
+        console.error('Compression error details:', compressionError.message, compressionError.stack)
+        
+        // If compression fails (e.g., FFmpeg not available), provide helpful error
+        const isFFmpegError = compressionError.message?.includes('FFmpeg') || 
+                             compressionError.message?.includes('ffmpeg') ||
+                             compressionError.code === 'ENOENT' ||
+                             compressionError.message?.includes('ENOENT')
+        
+        if (isFFmpegError) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Server-side compression is not available. File size: ${fileSizeMB.toFixed(2)}MB, Maximum: 25MB.`,
+              details: 'FFmpeg is not available on the server. Please compress the file before uploading or delete and re-upload to use client-side compression. The file must be under 25MB to transcribe.'
+            },
+            { status: 500 }
+          )
+        }
+        
         return NextResponse.json(
           {
             success: false,
