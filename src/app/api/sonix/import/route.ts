@@ -62,14 +62,24 @@ export async function POST(req: NextRequest) {
     let sonixTranscript
 
     try {
+      console.log('Fetching media details for:', sonix_media_id)
       sonixMedia = await sonixClient.getMedia(sonix_media_id)
+      console.log('Media fetched:', { id: sonixMedia.id, name: sonixMedia.name, status: sonixMedia.status })
+      
+      console.log('Fetching transcript for:', sonix_media_id)
       sonixTranscript = await sonixClient.getTranscript(sonix_media_id)
+      console.log('Transcript fetched:', { 
+        segments_count: sonixTranscript.segments?.length || 0,
+        has_full_text: !!sonixTranscript.full_text
+      })
     } catch (error: any) {
       console.error('Sonix API error:', error)
+      console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2))
       return NextResponse.json(
         { 
           success: false, 
-          error: `Failed to fetch from Sonix: ${error.message}` 
+          error: `Failed to fetch from Sonix: ${error.message}`,
+          details: error.stack || 'Check server logs for details'
         },
         { status: 500 }
       )
@@ -87,7 +97,26 @@ export async function POST(req: NextRequest) {
     }
 
     // Convert Sonix format to Max format
-    const maxFormat = convertSonixJSONToMaxFormat(sonixTranscript)
+    console.log('Converting Sonix transcript to Max format...')
+    let maxFormat
+    try {
+      maxFormat = convertSonixJSONToMaxFormat(sonixTranscript)
+      console.log('Conversion successful:', {
+        raw_text_length: maxFormat.raw_text.length,
+        segments_count: maxFormat.json_with_timestamps.segments.length
+      })
+    } catch (conversionError: any) {
+      console.error('Conversion error:', conversionError)
+      console.error('Sonix transcript structure:', JSON.stringify(sonixTranscript, null, 2))
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to convert Sonix transcript format',
+          details: conversionError.message || 'Invalid transcript structure from Sonix'
+        },
+        { status: 500 }
+      )
+    }
 
     // Get or create audio file record
     let audioFileId = audio_file_id
