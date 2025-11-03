@@ -79,11 +79,33 @@ class SonixClient {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Unknown error' }))
-      throw new Error(`Sonix API error: ${response.status} - ${error.message || response.statusText}`)
+      let errorMessage = `Sonix API error: ${response.status} ${response.statusText}`
+      try {
+        const contentType = response.headers.get('content-type')
+        if (contentType && contentType.includes('application/json')) {
+          const error = await response.json()
+          errorMessage = error.message || error.error || errorMessage
+        } else {
+          const text = await response.text()
+          if (text) errorMessage = text.substring(0, 200)
+        }
+      } catch {
+        // Ignore parse errors, use default message
+      }
+      throw new Error(errorMessage)
     }
 
-    return await response.json()
+    const contentType = response.headers.get('content-type')
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text()
+      throw new Error(`Sonix API returned non-JSON response (${contentType}): ${text.substring(0, 200)}`)
+    }
+
+    try {
+      return await response.json()
+    } catch (parseError: any) {
+      throw new Error(`Failed to parse Sonix API response: ${parseError.message}`)
+    }
   }
 
   /**

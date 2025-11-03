@@ -301,10 +301,23 @@ export async function GET(req: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
 
     // Fetch media files from Sonix
-    const sonixMedia = await sonixClient.listMediaFiles({
-      page,
-      status: status || undefined
-    })
+    let sonixMedia
+    try {
+      sonixMedia = await sonixClient.listMediaFiles({
+        page,
+        status: status || undefined
+      })
+    } catch (error: any) {
+      console.error('Sonix API error:', error)
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: error.message || 'Failed to fetch from Sonix API',
+          details: 'Make sure SONIX_API_KEY is set correctly and your Sonix account has API access.'
+        },
+        { status: 500 }
+      )
+    }
 
     // Check which ones are already imported
     const sonixMediaIds = sonixMedia.media.map(m => m.id)
