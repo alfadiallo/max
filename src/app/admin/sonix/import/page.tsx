@@ -91,13 +91,22 @@ export default function SonixImportPage() {
 
     try {
       const response = await fetch('/api/sonix/import/list?status=completed')
+      
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        console.error('Non-JSON response from API:', text.substring(0, 500))
+        throw new Error(`Server returned ${response.status} ${response.statusText}. Make sure SONIX_API_KEY is configured in Vercel environment variables.`)
+      }
+
       const result = await response.json()
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to load Sonix media')
+        throw new Error(result.error || result.details || 'Failed to load Sonix media')
       }
 
-      setMedia(result.data.media || [])
+      setMedia(result.data?.media || [])
     } catch (error: any) {
       console.error('Error loading Sonix media:', error)
       setMessage({
