@@ -16,8 +16,11 @@ export async function GET(req: NextRequest) {
     }
 
     // Get projects with project types
-    // Editors should see ALL projects, not just ones they created
-    const isEditor = user.user_metadata?.role === 'Editor' || user.user_metadata?.role === 'editor'
+    // Editors and Admins should see ALL projects, not just ones they created
+    const userRole = user.user_metadata?.role
+    const isEditor = userRole === 'Editor' || userRole === 'editor'
+    const isAdmin = userRole === 'Admin' || userRole === 'admin'
+    const canSeeAllProjects = isEditor || isAdmin
     
     let query = supabase
       .from('max_projects')
@@ -27,8 +30,8 @@ export async function GET(req: NextRequest) {
       `)
       .eq('archived', false)
     
-    // Only filter by created_by if user is NOT an Editor
-    if (!isEditor) {
+    // Only filter by created_by if user is NOT an Editor or Admin
+    if (!canSeeAllProjects) {
       query = query.eq('created_by', user.id)
     }
     

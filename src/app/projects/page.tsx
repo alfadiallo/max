@@ -44,10 +44,13 @@ export default function ProjectsPage() {
       setProjectTypes(types || [])
 
       // Load projects
-      // Editors should see ALL projects, not just ones they created
-      const isEditor = user.user_metadata?.role === 'Editor' || user.user_metadata?.role === 'editor'
+      // Editors and Admins should see ALL projects, not just ones they created
+      const userRole = user.user_metadata?.role
+      const isEditor = userRole === 'Editor' || userRole === 'editor'
+      const isAdmin = userRole === 'Admin' || userRole === 'admin'
+      const canSeeAllProjects = isEditor || isAdmin
       
-      console.log('Loading projects for user:', user.email, 'Role:', user.user_metadata?.role, 'IsEditor:', isEditor)
+      console.log('Loading projects for user:', user.email, 'Role:', userRole, 'CanSeeAll:', canSeeAllProjects)
       
       let query = supabase
         .from('max_projects')
@@ -57,8 +60,8 @@ export default function ProjectsPage() {
         `)
         .eq('archived', false)
       
-      // Only filter by created_by if user is NOT an Editor
-      if (!isEditor) {
+      // Only filter by created_by if user is NOT an Editor or Admin
+      if (!canSeeAllProjects) {
         query = query.eq('created_by', user.id)
       }
       
