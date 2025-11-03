@@ -342,7 +342,7 @@ export default function SonixImportPage() {
                 </tr>
               </thead>
               <tbody>
-                {media.map((item) => (
+                {(media || []).map((item) => (
                   <tr key={item.id} className={item.imported ? 'bg-green-50 dark:bg-green-900/20' : ''}>
                     <td className="border border-gray-300 dark:border-gray-700 p-2">
                       {!item.imported && item.status === 'completed' && (
