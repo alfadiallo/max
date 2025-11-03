@@ -176,7 +176,7 @@ export default function SonixImportPage() {
 
       setMessage({
         type: 'success',
-        text: `Successfully imported "${media.find(m => m.id === mediaId)?.name}"`
+        text: `Successfully imported "${(media || []).find(m => m.id === mediaId)?.name || 'media file'}"`
       })
 
       // Clear selection
