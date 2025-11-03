@@ -1,6 +1,7 @@
 /**
  * Server-side audio compression using FFmpeg
- * Compresses audio files to MP3 format with target bitrate
+ * Compresses audio files to Opus/OGG format (default) or MP3/M4A format
+ * Opus provides superior quality at lower bitrates and is supported by OpenAI Whisper
  */
 
 import { writeFile, unlink } from 'fs/promises'
@@ -143,22 +144,25 @@ export async function compressAudioServer(
       console.warn(`Compressed file still too large (${(compressedSize / 1024 / 1024).toFixed(2)}MB), trying lower bitrate...`)
       
       // Try with even lower bitrate (32k minimum for Opus, still good quality for speech)
-      if (format === 'opus' && targetBitrate !== '32k') {
-        // Try lower Opus bitrate
-        const lowerBitrate = targetBitrate === '96k' ? '64k' : '48k'
-        if (targetBitrate !== lowerBitrate) {
+      if (format === 'opus') {
+        // Progressive bitrate reduction for Opus
+        if (targetBitrate === '96k') {
           return compressAudioServer(buffer, originalFilename, {
             ...options,
-            bitrate: lowerBitrate
+            bitrate: '64k'
           })
-        }
-        // If still too large, try minimum
-        if (targetBitrate !== '32k') {
+        } else if (targetBitrate === '64k') {
+          return compressAudioServer(buffer, originalFilename, {
+            ...options,
+            bitrate: '48k'
+          })
+        } else if (targetBitrate === '48k') {
           return compressAudioServer(buffer, originalFilename, {
             ...options,
             bitrate: '32k'
           })
         }
+        // Already at minimum (32k) - file is too long for compression to help
       } else if (format === 'mp3' && targetBitrate !== '64k') {
         // For MP3, minimum is 64k
         return compressAudioServer(buffer, originalFilename, {
