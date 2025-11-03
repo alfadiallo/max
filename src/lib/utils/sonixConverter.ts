@@ -318,33 +318,58 @@ export function convertSonixJSONToMaxFormat(
   }
 
   // Validate and convert segments
-  const segments = sonixJSON.segments.map((seg, idx) => {
-    // Validate required fields
-    if (typeof seg.start !== 'number' || typeof seg.end !== 'number') {
+  const segments = sonixJSON.segments.map((seg: any, idx) => {
+    // Sonix API uses start_time/end_time instead of start/end
+    // Also handle both formats for compatibility
+    const start = typeof seg.start_time === 'number' ? seg.start_time : 
+                  typeof seg.start === 'number' ? seg.start : null
+    const end = typeof seg.end_time === 'number' ? seg.end_time : 
+                typeof seg.end === 'number' ? seg.end : null
+    
+    if (start === null || end === null || typeof start !== 'number' || typeof end !== 'number') {
       throw new Error(
         `Invalid segment at index ${idx}: missing or invalid start/end times. ` +
+        `Has start_time: ${typeof seg.start_time}, end_time: ${typeof seg.end_time}, ` +
+        `start: ${typeof seg.start}, end: ${typeof seg.end}. ` +
         `Segment: ${JSON.stringify(seg).substring(0, 200)}`
       )
     }
 
-    if (typeof seg.text !== 'string') {
+    // Build text from words if text field is missing, or use text field if present
+    let segmentText = seg.text
+    if (!segmentText && Array.isArray(seg.words)) {
+      segmentText = seg.words.map((w: any) => w.text || w.word || '').join('').trim()
+    }
+    
+    if (!segmentText || typeof segmentText !== 'string') {
       throw new Error(
         `Invalid segment at index ${idx}: missing or invalid text. ` +
         `Segment: ${JSON.stringify(seg).substring(0, 200)}`
       )
     }
 
+    // Convert words array - Sonix uses 'text' for word text, start_time/end_time for timing
+    const words = Array.isArray(seg.words) ? seg.words.map((w: any) => {
+      const wordText = w.text || w.word || String(w.text || w.word || '')
+      const wordStart = typeof w.start_time === 'number' ? w.start_time :
+                       typeof w.start === 'number' ? w.start : 0
+      const wordEnd = typeof w.end_time === 'number' ? w.end_time :
+                     typeof w.end === 'number' ? w.end : 0
+      
+      return {
+        word: wordText,
+        start: wordStart,
+        end: wordEnd
+      }
+    }) : []
+
     return {
       id: typeof seg.id === 'number' ? seg.id : idx,
-      seek: Math.floor(seg.start * 1000),
-      start: seg.start,
-      end: seg.end,
-      text: seg.text,
-      words: Array.isArray(seg.words) ? seg.words.map((w: any) => ({
-        word: typeof w.word === 'string' ? w.word : String(w.word || ''),
-        start: typeof w.start === 'number' ? w.start : 0,
-        end: typeof w.end === 'number' ? w.end : 0
-      })) : []
+      seek: Math.floor(start * 1000),
+      start: start,
+      end: end,
+      text: segmentText,
+      words: words
     }
   })
 
