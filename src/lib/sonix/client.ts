@@ -134,7 +134,32 @@ class SonixClient {
       throw new Error(`Sonix API error: ${response.status} - ${error.message || response.statusText}`)
     }
 
-    return await response.json()
+    const contentType = response.headers.get('content-type')
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text()
+      throw new Error(`Sonix API returned non-JSON response (${contentType}): ${text.substring(0, 200)}`)
+    }
+
+    const json = await response.json()
+    
+    // Handle wrapped responses (some APIs wrap the data)
+    if (json.data && (json.data.segments || Array.isArray(json.data))) {
+      return json.data
+    }
+    
+    // Handle direct response
+    if (json.segments || Array.isArray(json)) {
+      return json
+    }
+
+    // Log unexpected structure for debugging
+    console.error('Unexpected Sonix transcript response structure:', JSON.stringify(json, null, 2).substring(0, 1000))
+    
+    throw new Error(
+      `Unexpected Sonix transcript response format. ` +
+      `Expected segments array. ` +
+      `Received keys: ${Object.keys(json).join(', ')}`
+    )
   }
 
   /**

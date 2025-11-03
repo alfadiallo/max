@@ -248,8 +248,9 @@ export interface SonixJSONSegment {
  */
 export function convertSonixJSONToMaxFormat(
   sonixJSON: {
-    segments: SonixJSONSegment[]
+    segments?: SonixJSONSegment[]
     full_text?: string
+    [key: string]: any // Allow extra properties
   }
 ): {
   raw_text: string
@@ -261,21 +262,85 @@ export function convertSonixJSONToMaxFormat(
     }
   }
 } {
-  const segments = sonixJSON.segments.map((seg, idx) => ({
-    id: seg.id || idx,
-    seek: Math.floor(seg.start * 1000),
-    start: seg.start,
-    end: seg.end,
-    text: seg.text,
-    words: seg.words || []
-  }))
+  // Validate input structure
+  if (!sonixJSON) {
+    throw new Error('Sonix JSON transcript is null or undefined')
+  }
+
+  // Check if segments exist and is an array
+  if (!sonixJSON.segments) {
+    // Try alternative property names that Sonix might use
+    const altSegments = (sonixJSON as any).transcript?.segments || 
+                       (sonixJSON as any).data?.segments ||
+                       (sonixJSON as any).chunks
+    
+    if (Array.isArray(altSegments)) {
+      sonixJSON.segments = altSegments
+    } else {
+      throw new Error(
+        `Invalid Sonix transcript format: missing segments array. ` +
+        `Received keys: ${Object.keys(sonixJSON).join(', ')}. ` +
+        `Full structure: ${JSON.stringify(sonixJSON, null, 2).substring(0, 500)}`
+      )
+    }
+  }
+
+  if (!Array.isArray(sonixJSON.segments)) {
+    throw new Error(
+      `Invalid Sonix transcript format: segments is not an array. ` +
+      `Type: ${typeof sonixJSON.segments}. ` +
+      `Value: ${JSON.stringify(sonixJSON.segments).substring(0, 200)}`
+    )
+  }
+
+  if (sonixJSON.segments.length === 0) {
+    throw new Error('Sonix transcript contains no segments')
+  }
+
+  // Validate and convert segments
+  const segments = sonixJSON.segments.map((seg, idx) => {
+    // Validate required fields
+    if (typeof seg.start !== 'number' || typeof seg.end !== 'number') {
+      throw new Error(
+        `Invalid segment at index ${idx}: missing or invalid start/end times. ` +
+        `Segment: ${JSON.stringify(seg).substring(0, 200)}`
+      )
+    }
+
+    if (typeof seg.text !== 'string') {
+      throw new Error(
+        `Invalid segment at index ${idx}: missing or invalid text. ` +
+        `Segment: ${JSON.stringify(seg).substring(0, 200)}`
+      )
+    }
+
+    return {
+      id: typeof seg.id === 'number' ? seg.id : idx,
+      seek: Math.floor(seg.start * 1000),
+      start: seg.start,
+      end: seg.end,
+      text: seg.text,
+      words: Array.isArray(seg.words) ? seg.words.map((w: any) => ({
+        word: typeof w.word === 'string' ? w.word : String(w.word || ''),
+        start: typeof w.start === 'number' ? w.start : 0,
+        end: typeof w.end === 'number' ? w.end : 0
+      })) : []
+    }
+  })
 
   const duration = segments.length > 0 
     ? segments[segments.length - 1].end 
     : 0
 
+  // Generate full text if not provided
+  const raw_text = sonixJSON.full_text || segments.map(s => s.text).join(' ')
+
+  if (!raw_text || raw_text.trim().length === 0) {
+    throw new Error('Sonix transcript has no text content')
+  }
+
   return {
-    raw_text: sonixJSON.full_text || segments.map(s => s.text).join(' '),
+    raw_text,
     json_with_timestamps: {
       segments,
       // No flattened words array - Sonix format uses nested words only
