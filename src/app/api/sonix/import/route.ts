@@ -204,24 +204,80 @@ export async function POST(req: NextRequest) {
     }, { onConflict: 'id' })
 
     // Create transcription record
+    // Note: source field might not exist if migration hasn't been run yet
+    const transcriptionPayload: any = {
+      audio_file_id: audioFileId,
+      transcription_type: 'T-1',
+      language_code: sonixMedia.language || 'en',
+      raw_text: maxFormat.raw_text,
+      json_with_timestamps: maxFormat.json_with_timestamps,
+      created_by: user.id
+    }
+    
+    // Only include source if column exists (migration may not have run)
+    // If the insert fails, we'll try without source field
+    transcriptionPayload.source = 'sonix'
+
     const { data: transcription, error: transcriptionError } = await adminClient
       .from('max_transcriptions')
-      .insert({
-        audio_file_id: audioFileId,
-        transcription_type: 'T-1',
-        language_code: sonixMedia.language || 'en',
-        raw_text: maxFormat.raw_text,
-        json_with_timestamps: maxFormat.json_with_timestamps,
-        source: 'sonix',
-        created_by: user.id
-      })
+      .insert(transcriptionPayload)
       .select()
       .single()
 
     if (transcriptionError || !transcription) {
       console.error('Error creating transcription:', transcriptionError)
+      console.error('Transcription payload:', JSON.stringify(transcriptionPayload, null, 2))
+      console.error('Error details:', JSON.stringify(transcriptionError, null, 2))
+      
+      // If error is about source column not existing, try without it
+      if (transcriptionError?.code === '42703' || transcriptionError?.message?.includes('source')) {
+        console.log('Retrying insert without source field (migration may not have run)')
+        const { data: retryTranscription, error: retryError } = await adminClient
+          .from('max_transcriptions')
+          .insert({
+            audio_file_id: audioFileId,
+            transcription_type: 'T-1',
+            language_code: sonixMedia.language || 'en',
+            raw_text: maxFormat.raw_text,
+            json_with_timestamps: maxFormat.json_with_timestamps,
+            created_by: user.id
+            // source field omitted
+          })
+          .select()
+          .single()
+
+        if (retryError || !retryTranscription) {
+          return NextResponse.json(
+            { 
+              success: false, 
+              error: 'Failed to create transcription record',
+              details: retryError?.message || 'Database insert failed. Please run the migration: sql/migrations/supabase-add-sonix-support.sql'
+            },
+            { status: 500 }
+          )
+        }
+        
+        return NextResponse.json({
+          success: true,
+          data: {
+            transcription_id: retryTranscription.id,
+            audio_file_id: audioFileId,
+            project_id: finalProjectId,
+            sonix_media_id: sonix_media_id,
+            duration: sonixMedia.duration,
+            segments_count: maxFormat.json_with_timestamps.segments.length,
+            warning: 'Database migration not run - source field missing'
+          }
+        }, { status: 201 })
+      }
+      
       return NextResponse.json(
-        { success: false, error: 'Failed to create transcription record' },
+        { 
+          success: false, 
+          error: 'Failed to create transcription record',
+          details: transcriptionError?.message || 'Database insert failed',
+          hint: 'Please run the migration: sql/migrations/supabase-add-sonix-support.sql'
+        },
         { status: 500 }
       )
     }
