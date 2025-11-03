@@ -1,8 +1,13 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// Supabase automatically provides these environment variables in Edge Functions
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+
+// For accessing Storage, we can use the anon key or create an admin client
+// Since we need service role for Storage, we'll use the service role key if available
+// Otherwise, we'll need to pass the audio data directly (which we're already doing)
 
 interface CompressionRequest {
   audio_url?: string // URL to audio file in Supabase Storage
@@ -50,7 +55,13 @@ serve(async (req) => {
     if (audio_url) {
       // Download from Supabase Storage
       console.log('Downloading audio from:', audio_url)
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+      // Use anon key for public storage access, or extract from Authorization header
+      const authHeader = req.headers.get('Authorization') || `Bearer ${SUPABASE_ANON_KEY}`
+      const apiKey = req.headers.get('apikey') || SUPABASE_ANON_KEY
+      
+      const supabase = createClient(SUPABASE_URL, apiKey, {
+        global: { headers: { Authorization: authHeader } }
+      })
       
       const { data, error } = await supabase.storage.from('max-audio').download(audio_url.replace(/^.*\/max-audio\//, ''))
       

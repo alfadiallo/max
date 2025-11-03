@@ -154,12 +154,15 @@ export async function POST(req: NextRequest) {
         
         if (!compressResult.success) {
           console.error('Edge Function compression failed:', compressResult)
+          console.error('Full response:', JSON.stringify(compressResult, null, 2))
+          
           return NextResponse.json(
             {
               success: false,
               error: compressResult.error || 'Compression failed',
-              details: compressResult.details || compressResult.suggestion || 'Failed to compress audio file',
-              original_size_mb: fileSizeMB.toFixed(2)
+              details: compressResult.details || compressResult.suggestion || 'Failed to compress audio file. Edge Function may not support FFmpeg compression.',
+              original_size_mb: fileSizeMB.toFixed(2),
+              suggestion: 'Please delete this file and re-upload it. Client-side compression will automatically compress files > 20MB before upload.'
             },
             { status: compressResponse.status || 500 }
           )
