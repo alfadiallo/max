@@ -99,27 +99,13 @@ export async function POST(req: NextRequest) {
 
     console.log('Download completed in:', Date.now() - downloadStartTime, 'ms')
     
-    // Check Content-Length header before downloading (save bandwidth)
+    // Check Content-Length header for logging (we'll compress if needed after download)
     const contentLength = audioResponse.headers.get('content-length')
     if (contentLength) {
       const sizeBytes = parseInt(contentLength, 10)
       const sizeMB = sizeBytes / 1024 / 1024
       console.log('Audio file size (from header):', sizeMB.toFixed(2), 'MB')
-      
-      // OpenAI has a hard 25MB (26,214,400 bytes) limit
-      const OPENAI_MAX_SIZE = 25 * 1024 * 1024 // 25MB in bytes
-      
-      if (sizeBytes > OPENAI_MAX_SIZE) {
-        console.error('File size exceeds OpenAI limit:', sizeMB.toFixed(2), 'MB (limit: 25MB)')
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Audio file is too large for transcription. File size: ${sizeMB.toFixed(2)}MB, Maximum: 25MB. Please compress the audio file or split it into smaller chunks.`,
-            details: `OpenAI Whisper API has a hard limit of 25MB per file. Your file is ${sizeMB.toFixed(2)}MB.`
-          },
-          { status: 413 }
-        )
-      }
+      // Note: Don't return error here - we'll compress server-side if needed
     }
     
     const audioBlob = await audioResponse.blob()
