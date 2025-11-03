@@ -37,11 +37,13 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
         throw new Error('File too large. Max size: 500MB')
       }
 
-      // Compress file if it's larger than 25MB (OpenAI's limit) or user preference
+      // IMPORTANT: Compress file if it's larger than 20MB (to stay under OpenAI's 25MB limit)
+      // This ensures transcription will work
       let fileToUpload = file
       const fileSizeMB = file.size / 1024 / 1024
       
-      if (shouldCompress(file, 25)) {
+      // Always compress files > 20MB to ensure they stay under OpenAI's 25MB limit
+      if (shouldCompress(file, 20)) {
         setCompressing(true)
         setUploadProgress(5)
         

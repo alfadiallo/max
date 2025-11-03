@@ -98,13 +98,45 @@ export async function POST(req: NextRequest) {
 
     console.log('Download completed in:', Date.now() - downloadStartTime, 'ms')
     
+    // Check Content-Length header before downloading (save bandwidth)
+    const contentLength = audioResponse.headers.get('content-length')
+    if (contentLength) {
+      const sizeBytes = parseInt(contentLength, 10)
+      const sizeMB = sizeBytes / 1024 / 1024
+      console.log('Audio file size (from header):', sizeMB.toFixed(2), 'MB')
+      
+      // OpenAI has a hard 25MB (26,214,400 bytes) limit
+      const OPENAI_MAX_SIZE = 25 * 1024 * 1024 // 25MB in bytes
+      
+      if (sizeBytes > OPENAI_MAX_SIZE) {
+        console.error('File size exceeds OpenAI limit:', sizeMB.toFixed(2), 'MB (limit: 25MB)')
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Audio file is too large for transcription. File size: ${sizeMB.toFixed(2)}MB, Maximum: 25MB. Please compress the audio file or split it into smaller chunks.`,
+            details: `OpenAI Whisper API has a hard limit of 25MB per file. Your file is ${sizeMB.toFixed(2)}MB.`
+          },
+          { status: 413 }
+        )
+      }
+    }
+    
     const audioBlob = await audioResponse.blob()
     const fileSizeMB = audioBlob.size / 1024 / 1024
-    console.log('Audio file size:', fileSizeMB.toFixed(2), 'MB')
+    console.log('Audio file size (downloaded):', fileSizeMB.toFixed(2), 'MB')
     
-    // Check file size (OpenAI has a 25MB limit, but we'll be more lenient with error message)
-    if (fileSizeMB > 25) {
-      console.warn('File size exceeds OpenAI recommended limit (25MB):', fileSizeMB, 'MB')
+    // Double-check after download (in case header was wrong)
+    const OPENAI_MAX_SIZE = 25 * 1024 * 1024 // 25MB in bytes
+    if (audioBlob.size > OPENAI_MAX_SIZE) {
+      console.error('File size exceeds OpenAI limit after download:', fileSizeMB.toFixed(2), 'MB')
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Audio file is too large for transcription. File size: ${fileSizeMB.toFixed(2)}MB, Maximum: 25MB. Please compress the audio file or split it into smaller chunks.`,
+          details: `OpenAI Whisper API has a hard limit of 25MB per file. Your file is ${fileSizeMB.toFixed(2)}MB.`
+        },
+        { status: 413 }
+      )
     }
     
     // Use the original file extension so OpenAI can detect the format correctly
