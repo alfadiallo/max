@@ -158,20 +158,31 @@ export default function SonixImportPage() {
 
       // Check if response is JSON
       const contentType = response.headers.get('content-type')
+      let result: any
+      
       if (!contentType || !contentType.includes('application/json')) {
         const text = await response.text()
         throw new Error(`Server returned ${response.status} ${response.statusText}. ${text.substring(0, 200)}`)
       }
 
-      const result = await response.json()
+      try {
+        result = await response.json()
+      } catch (parseError) {
+        const text = await response.text().catch(() => 'Unable to read response')
+        throw new Error(`Failed to parse server response (${response.status}): ${text.substring(0, 200)}`)
+      }
 
-      if (!result || !result.success) {
-        throw new Error(result?.error || result?.details || 'Import failed')
+      if (!result) {
+        throw new Error('Empty response from server')
+      }
+
+      if (!result.success) {
+        throw new Error(result.error || result.details || 'Import failed')
       }
 
       // Validate response data structure
       if (!result.data) {
-        throw new Error('Invalid response format from server')
+        throw new Error('Invalid response format from server: missing data field')
       }
 
       // Update media list
