@@ -121,7 +121,24 @@ export async function POST(req: NextRequest) {
     let finalExtension = fileExtension
     
     if (audioBuffer.length > OPENAI_MAX_SIZE) {
-      console.log(`File exceeds 25MB limit (${fileSizeMB.toFixed(2)}MB), calling Supabase Edge Function for compression...`)
+      console.log(`File exceeds 25MB limit (${fileSizeMB.toFixed(2)}MB), attempting compression...`)
+      
+      // For very large files (>200MB), Edge Function will likely fail due to memory limits
+      // Direct users to use client-side compression by re-uploading
+      const EDGE_FUNCTION_MEMORY_LIMIT = 200 * 1024 * 1024 // 200MB
+      if (audioBuffer.length > EDGE_FUNCTION_MEMORY_LIMIT) {
+        console.log(`File too large (${fileSizeMB.toFixed(2)}MB) for Edge Function compression`)
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'File too large for server-side compression',
+            details: `File size (${fileSizeMB.toFixed(2)}MB) exceeds server memory limits. Please delete this file and re-upload it - client-side compression will automatically compress it before upload.`,
+            suggestion: 'Delete this file from the project and upload it again. The upload process will automatically compress files > 20MB before storing them.',
+            original_size_mb: fileSizeMB.toFixed(2)
+          },
+          { status: 413 }
+        )
+      }
       
       try {
         // Call Supabase Edge Function for compression
@@ -194,12 +211,20 @@ export async function POST(req: NextRequest) {
         console.error('❌ Compression failed:', compressionError)
         console.error('Compression error details:', compressionError.message, compressionError.stack)
         
+        // Provide clear guidance for users
         return NextResponse.json(
           {
             success: false,
-            error: `Failed to compress audio file. Original size: ${fileSizeMB.toFixed(2)}MB, Maximum: 25MB.`,
-            details: compressionError.message || 'Compression error occurred. Please compress the file manually or split it into smaller chunks.',
-            suggestion: 'Try deleting and re-uploading the file to use client-side compression, or compress it manually before uploading.'
+            error: 'Server-side compression failed',
+            details: `Failed to compress audio file (${fileSizeMB.toFixed(2)}MB). Server-side compression has limitations.`,
+            suggestion: 'Please delete this file and re-upload it. Client-side compression will automatically compress files > 20MB before upload, which avoids server limitations.',
+            original_size_mb: fileSizeMB.toFixed(2),
+            next_steps: [
+              '1. Delete this audio file from the project',
+              '2. Re-upload the original file',
+              '3. Client-side compression will run automatically',
+              '4. Transcription will work with the compressed file'
+            ]
           },
           { status: 500 }
         )
