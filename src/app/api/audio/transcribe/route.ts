@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
           audioFileRecord?.file_name || `audio${fileExtension}`,
           {
             targetSizeMB: 20, // Target 20MB (safe margin under 25MB)
-            format: 'mp3' // Always use MP3 for compression
+            format: 'opus' // Use Opus for best compression (supported by Whisper)
           }
         )
         
@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
         console.log(`Compression successful: ${fileSizeMB.toFixed(2)}MB → ${compressedSizeMB.toFixed(2)}MB`)
         
         finalBuffer = compressedBuffer
-        finalExtension = '.mp3'
+        finalExtension = '.ogg' // Opus uses OGG container
         
         // Check if compression was successful (still under limit)
         if (compressedBuffer.length > OPENAI_MAX_SIZE) {
@@ -182,10 +182,16 @@ export async function POST(req: NextRequest) {
     }
     
     // Create File object from final buffer
+    // Convert Buffer to Uint8Array for File constructor
+    const uint8Array = new Uint8Array(finalBuffer)
     const audioFile = new File(
-      [finalBuffer],
+      [uint8Array],
       `audio-${audio_file_id}${finalExtension}`,
-      { type: finalExtension === '.mp3' ? 'audio/mpeg' : audioBlob.type }
+      { 
+        type: finalExtension === '.ogg' ? 'audio/ogg' : 
+              finalExtension === '.mp3' ? 'audio/mpeg' : 
+              audioBlob.type 
+      }
     )
 
     // Initialize OpenAI client with timeout

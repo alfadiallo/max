@@ -17,7 +17,7 @@ if (ffmpegStatic) {
 interface CompressionOptions {
   targetSizeMB?: number // Target file size in MB
   bitrate?: string // Audio bitrate (e.g., '128k', '96k', '64k')
-  format?: 'mp3' | 'm4a' // Output format
+  format?: 'mp3' | 'm4a' | 'opus' // Output format - Opus recommended for best compression
 }
 
 // Note: Compression result is just the buffer, no need for separate interface
@@ -36,13 +36,13 @@ export async function compressAudioServer(
   const {
     targetSizeMB = 20, // Default: 20MB (under OpenAI's 25MB limit)
     bitrate,
-    format = 'mp3'
+    format = 'opus' // Default to Opus for best compression (supported by Whisper)
   } = options
 
   // Create temporary directory for processing
   const tempDir = tmpdir()
   const inputExt = originalFilename.split('.').pop() || 'wav'
-  const outputExt = format === 'mp3' ? 'mp3' : 'm4a'
+  const outputExt = format === 'opus' ? 'ogg' : format === 'mp3' ? 'mp3' : 'm4a'
   
   const inputPath = join(tempDir, `input-${Date.now()}.${inputExt}`)
   const outputPath = join(tempDir, `output-${Date.now()}.${outputExt}`)
@@ -54,17 +54,20 @@ export async function compressAudioServer(
     const originalSize = buffer.length
     
     // Calculate bitrate if not provided
-    let targetBitrate = bitrate || '128k'
+    // Opus provides better quality at lower bitrates than MP3
+    // Recommended Opus bitrates: 64k (very good quality), 96k (excellent), 128k (transparent)
+    let targetBitrate = bitrate || '96k' // Default to 96k for Opus (better than 128k MP3)
     
     if (!bitrate && targetSizeMB) {
       // Estimate required bitrate based on target size
-      // For MP3: bitrate (kbps) ≈ (targetSizeMB * 8 * 1024) / duration_seconds
-      // We'll use a conservative approach: start with 128k, adjust if needed
-      // For files that are definitely too large, use lower bitrate
+      // For Opus: bitrate (kbps) ≈ (targetSizeMB * 8 * 1024) / duration_seconds
+      // Opus is more efficient, so we can use lower bitrates than MP3
       if (originalSize > 50 * 1024 * 1024) { // > 50MB
-        targetBitrate = '96k'
+        targetBitrate = '64k' // Opus at 64k = MP3 at ~96k quality
       } else if (originalSize > 100 * 1024 * 1024) { // > 100MB
-        targetBitrate = '64k'
+        targetBitrate = '48k' // Opus at 48k = MP3 at ~80k quality (still very good for speech)
+      } else if (originalSize > 200 * 1024 * 1024) { // > 200MB
+        targetBitrate = '32k' // Lower bitrate for very large files (good for speech)
       }
     }
 
@@ -72,12 +75,28 @@ export async function compressAudioServer(
 
     // Compress audio using FFmpeg
     await new Promise<void>((resolve, reject) => {
-      const command = ffmpeg(inputPath)
+      let command = ffmpeg(inputPath)
         .audioBitrate(targetBitrate)
-        .audioCodec(format === 'mp3' ? 'libmp3lame' : 'aac')
         .audioChannels(2) // Keep stereo
-        .audioFrequency(44100) // Standard sample rate
-        .toFormat(format)
+        .audioFrequency(48000) // Opus prefers 48kHz, MP3 uses 44.1kHz
+      
+      // Set codec and format based on format type
+      if (format === 'opus') {
+        command = command
+          .audioCodec('libopus') // Opus codec
+          .toFormat('ogg') // OGG container for Opus
+      } else if (format === 'mp3') {
+        command = command
+          .audioCodec('libmp3lame') // MP3 codec
+          .audioFrequency(44100) // MP3 standard sample rate
+          .toFormat('mp3')
+      } else {
+        command = command
+          .audioCodec('aac') // AAC codec
+          .toFormat('m4a')
+      }
+      
+      command
         .on('start', (commandLine) => {
           console.log('FFmpeg command:', commandLine)
         })
@@ -123,8 +142,25 @@ export async function compressAudioServer(
     if (compressedSize > OPENAI_MAX_SIZE) {
       console.warn(`Compressed file still too large (${(compressedSize / 1024 / 1024).toFixed(2)}MB), trying lower bitrate...`)
       
-      // Try with even lower bitrate (64k minimum)
-      if (targetBitrate !== '64k') {
+      // Try with even lower bitrate (32k minimum for Opus, still good quality for speech)
+      if (format === 'opus' && targetBitrate !== '32k') {
+        // Try lower Opus bitrate
+        const lowerBitrate = targetBitrate === '96k' ? '64k' : '48k'
+        if (targetBitrate !== lowerBitrate) {
+          return compressAudioServer(buffer, originalFilename, {
+            ...options,
+            bitrate: lowerBitrate
+          })
+        }
+        // If still too large, try minimum
+        if (targetBitrate !== '32k') {
+          return compressAudioServer(buffer, originalFilename, {
+            ...options,
+            bitrate: '32k'
+          })
+        }
+      } else if (format === 'mp3' && targetBitrate !== '64k') {
+        // For MP3, minimum is 64k
         return compressAudioServer(buffer, originalFilename, {
           ...options,
           bitrate: '64k'
