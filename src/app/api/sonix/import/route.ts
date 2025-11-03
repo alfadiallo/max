@@ -257,12 +257,21 @@ export async function POST(req: NextRequest) {
           )
         }
         
+        // Get project_id for the response
+        const { data: retryAudioFile } = await supabase
+          .from('max_audio_files')
+          .select('project_id')
+          .eq('id', audioFileId)
+          .single()
+        
+        const retryProjectId = retryAudioFile?.project_id || project_id || null
+        
         return NextResponse.json({
           success: true,
           data: {
             transcription_id: retryTranscription.id,
             audio_file_id: audioFileId,
-            project_id: finalProjectId,
+            project_id: retryProjectId,
             sonix_media_id: sonix_media_id,
             duration: sonixMedia.duration,
             segments_count: maxFormat.json_with_timestamps.segments.length,
