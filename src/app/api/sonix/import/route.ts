@@ -301,7 +301,7 @@ export async function GET(req: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
 
     // Fetch media files from Sonix
-    let sonixMedia
+    let sonixMedia: any
     try {
       sonixMedia = await sonixClient.listMediaFiles({
         page,
