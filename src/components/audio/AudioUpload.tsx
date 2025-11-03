@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { UploadCloud } from 'lucide-react'
+import { compressAudioSimple, shouldCompress } from '@/lib/utils/audioCompression'
 
 interface AudioUploadProps {
   projectId: string
@@ -13,6 +14,7 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
   const [uploading, setUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [compressing, setCompressing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
@@ -35,6 +37,40 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
         throw new Error('File too large. Max size: 500MB')
       }
 
+      // Compress file if it's larger than 25MB (OpenAI's limit) or user preference
+      let fileToUpload = file
+      const fileSizeMB = file.size / 1024 / 1024
+      
+      if (shouldCompress(file, 25)) {
+        setCompressing(true)
+        setUploadProgress(5)
+        
+        try {
+          console.log(`File is ${fileSizeMB.toFixed(2)}MB, compressing to reduce size...`)
+          
+          // Compress to target 20MB (under OpenAI's 25MB limit)
+          const compressionResult = await compressAudioSimple(file, 20)
+          fileToUpload = compressionResult.file
+          
+          console.log(
+            `Compression complete: ${compressionResult.originalSize / 1024 / 1024}MB → ` +
+            `${compressionResult.compressedSize / 1024 / 1024}MB ` +
+            `(${compressionResult.compressionRatio.toFixed(1)}% reduction, saved ${compressionResult.savedMB.toFixed(2)}MB)`
+          )
+          
+          // Show compression info to user
+          if (compressionResult.savedMB > 1) {
+            console.log(`✅ Compressed audio: Saved ${compressionResult.savedMB.toFixed(2)}MB`)
+          }
+        } catch (compressionError: any) {
+          console.warn('Compression failed, using original file:', compressionError)
+          // Continue with original file if compression fails
+          fileToUpload = file
+        } finally {
+          setCompressing(false)
+        }
+      }
+
       // Get project info first to determine storage path
       const { data: project, error: projectError } = await supabase
         .from('max_projects')
@@ -53,16 +89,19 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
         throw new Error('Project type not found. Please assign a project type to this project.')
       }
 
-      // Generate file path
-      const fileName = `${Date.now()}-${file.name}`
+      // Generate file path (use original filename if compressed, otherwise compressed name)
+      const originalName = fileToUpload.name.includes('_compressed') 
+        ? file.name.replace(/\.[^/.]+$/, '.wav') // Keep original extension concept
+        : file.name
+      const fileName = `${Date.now()}-${originalName}`
       const storagePath = `audio/${project.project_type.slug}/${fileName}`
 
       // Upload directly to Supabase Storage (bypasses Next.js body size limit)
-      setUploadProgress(10)
+      setUploadProgress(compressing ? 15 : 10)
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('max-audio')
-        .upload(storagePath, file, {
+        .upload(storagePath, fileToUpload, {
           contentType: file.type,
           upsert: false,
           cacheControl: '3600'
@@ -101,9 +140,9 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: projectId,
-          file_name: file.name,
+          file_name: originalName, // Use original name for database
           file_path: storagePath,
-          file_size_bytes: file.size,
+          file_size_bytes: fileToUpload.size, // Store compressed size
           file_url: publicUrl
         })
       })
@@ -189,7 +228,14 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
               style={{ width: `${uploadProgress}%` }}
             />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-300">Uploading... {uploadProgress}%</p>
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            {compressing ? 'Compressing audio...' : 'Uploading...'} {uploadProgress}%
+          </p>
+          {compressing && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Reducing file size for faster processing
+            </p>
+          )}
         </div>
       ) : (
         <div
