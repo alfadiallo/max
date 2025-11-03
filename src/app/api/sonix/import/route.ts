@@ -307,6 +307,7 @@ export async function GET(req: NextRequest) {
         page,
         status: status || undefined
       })
+      console.log('Sonix API response:', JSON.stringify(sonixMedia, null, 2))
     } catch (error: any) {
       console.error('Sonix API error:', error)
       return NextResponse.json(
@@ -320,20 +321,38 @@ export async function GET(req: NextRequest) {
     }
 
     // Validate response structure
-    if (!sonixMedia || !sonixMedia.media || !Array.isArray(sonixMedia.media)) {
-      console.error('Unexpected Sonix API response structure:', sonixMedia)
+    // Sonix API might return media directly as array, or wrapped in a data/media property
+    let mediaArray: any[] = []
+    if (Array.isArray(sonixMedia)) {
+      // Response is directly an array
+      mediaArray = sonixMedia
+    } else if (sonixMedia?.media && Array.isArray(sonixMedia.media)) {
+      // Response has media property
+      mediaArray = sonixMedia.media
+    } else if (sonixMedia?.data && Array.isArray(sonixMedia.data)) {
+      // Response has data property
+      mediaArray = sonixMedia.data
+    } else {
+      console.error('Unexpected Sonix API response structure:', JSON.stringify(sonixMedia, null, 2))
       return NextResponse.json(
         {
           success: false,
           error: 'Unexpected response format from Sonix API',
-          details: 'The API response does not contain a valid media array. Please check the Sonix API documentation.'
+          details: 'The API response does not contain a valid media array. Response keys: ' + Object.keys(sonixMedia || {}).join(', ')
         },
         { status: 500 }
       )
     }
 
+    // Normalize to our expected structure
+    const normalizedResponse = {
+      media: mediaArray,
+      total_pages: sonixMedia?.total_pages || sonixMedia?.totalPages || 1,
+      page: sonixMedia?.page || page
+    }
+
     // Check which ones are already imported
-    const sonixMediaIds = sonixMedia.media.map(m => m.id).filter((id): id is string => !!id)
+    const sonixMediaIds = normalizedResponse.media.map(m => m.id).filter((id): id is string => !!id)
 
     let importedMap: Record<string, string> = {}
     if (sonixMediaIds.length > 0) {
@@ -353,7 +372,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Merge import status
-    const mediaWithStatus = sonixMedia.media.map(media => ({
+    const mediaWithStatus = normalizedResponse.media.map(media => ({
       ...media,
       imported: !!importedMap[media.id],
       audio_file_id: importedMap[media.id] || null
@@ -363,8 +382,8 @@ export async function GET(req: NextRequest) {
       success: true,
       data: {
         media: mediaWithStatus,
-        total_pages: sonixMedia.total_pages,
-        page: sonixMedia.page || page
+        total_pages: normalizedResponse.total_pages,
+        page: normalizedResponse.page
       }
     })
 
