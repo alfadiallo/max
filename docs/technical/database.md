@@ -116,27 +116,32 @@ CREATE INDEX idx_projects_created_at ON projects(created_at DESC);
 
 ### 3. Audio & Files
 
-#### `audio_files`
-Raw audio uploads.
+#### `audio_files` (also `max_audio_files`)
+Raw audio/video uploads. Supports both direct uploads and Sonix imports.
 
 ```sql
-CREATE TABLE audio_files (
+CREATE TABLE max_audio_files (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID NOT NULL REFERENCES projects(id),
+  project_id UUID NOT NULL REFERENCES max_projects(id),
   file_name TEXT NOT NULL, -- Original filename: 'dr-soto-lecture.mp3'
   file_path TEXT NOT NULL, -- Storage path: 'audio/lecture/[uuid]-dr-soto-lecture.mp3'
   file_size_bytes BIGINT,
   duration_seconds DECIMAL,
-  uploaded_by UUID NOT NULL REFERENCES users(id),
+  uploaded_by UUID NOT NULL REFERENCES max_users(id),
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
-  archived BOOLEAN DEFAULT FALSE
+  archived BOOLEAN DEFAULT FALSE,
+  -- Sonix integration (v2.0.0)
+  sonix_media_id TEXT, -- Reference to Sonix media ID
+  file_type TEXT DEFAULT 'audio' CHECK (file_type IN ('audio', 'video')),
+  sonix_status TEXT -- Sync status with Sonix
 );
 
 -- Indexes
-CREATE INDEX idx_audio_files_project ON audio_files(project_id);
-CREATE INDEX idx_audio_files_uploaded_by ON audio_files(uploaded_by);
-CREATE INDEX idx_audio_files_created_at ON audio_files(created_at DESC);
+CREATE INDEX idx_max_audio_files_project ON max_audio_files(project_id);
+CREATE INDEX idx_max_audio_files_uploaded_by ON max_audio_files(uploaded_by);
+CREATE INDEX idx_max_audio_files_created_at ON max_audio_files(created_at DESC);
+CREATE INDEX idx_max_audio_files_sonix_media_id ON max_audio_files(sonix_media_id) WHERE sonix_media_id IS NOT NULL;
 ```
 
 **File Path Strategy:**
@@ -159,43 +164,52 @@ Examples:
 
 ### 4. Transcriptions (English)
 
-#### `transcriptions`
-Initial Whisper transcription output (T-1).
+#### `transcriptions` (also `max_transcriptions`)
+Initial transcription output (T-1) from Whisper or Sonix.
 
 ```sql
-CREATE TABLE transcriptions (
+CREATE TABLE max_transcriptions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  audio_file_id UUID NOT NULL REFERENCES audio_files(id),
+  audio_file_id UUID NOT NULL REFERENCES max_audio_files(id),
   transcription_type TEXT DEFAULT 'T-1',
   language_code TEXT DEFAULT 'en',
   raw_text TEXT NOT NULL, -- Full transcription as plain text
-  json_with_timestamps JSONB NOT NULL, -- Detailed segment data
-  created_by UUID NOT NULL REFERENCES users(id),
+  json_with_timestamps JSONB NOT NULL, -- Detailed segment data with word-level timestamps
+  created_by UUID NOT NULL REFERENCES max_users(id),
   created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  updated_at TIMESTAMP DEFAULT NOW(),
+  -- Source tracking (v2.0.0)
+  source TEXT DEFAULT 'whisper' CHECK (source IN ('whisper', 'sonix')),
+  final_version_id UUID REFERENCES max_transcription_versions(id) ON DELETE SET NULL
 );
 
 -- Indexes
-CREATE INDEX idx_transcriptions_audio ON transcriptions(audio_file_id);
-CREATE INDEX idx_transcriptions_created_at ON transcriptions(created_at DESC);
+CREATE INDEX idx_max_transcriptions_audio ON max_transcriptions(audio_file_id);
+CREATE INDEX idx_max_transcriptions_created_at ON max_transcriptions(created_at DESC);
+CREATE INDEX idx_max_transcriptions_source ON max_transcriptions(source);
+CREATE INDEX idx_max_transcriptions_final_version ON max_transcriptions(final_version_id);
 ```
 
-**JSON Structure:**
+**JSON Structure (Sonix-style with nested words):**
 ```json
-[
-  {
-    "start": 0.0,
-    "end": 5.2,
-    "text": "Hello everyone, welcome to today's lecture on endodontics.",
-    "speaker": "Dr. Soto"
-  },
-  {
-    "start": 5.2,
-    "end": 12.8,
-    "text": "Today we'll discuss root canal treatment...",
-    "speaker": "Dr. Soto"
+{
+  "segments": [
+    {
+      "id": 0,
+      "start": 0.0,
+      "end": 5.2,
+      "text": "Hello everyone, welcome to today's lecture on endodontics.",
+      "words": [
+        { "word": "Hello", "start": 0.0, "end": 0.5 },
+        { "word": "everyone", "start": 0.5, "end": 1.2 }
+      ]
+    }
+  ],
+  "metadata": {
+    "source": "sonix" | "whisper",
+    "duration": 606.0
   }
-]
+}
 ```
 
 **Design Decisions:**

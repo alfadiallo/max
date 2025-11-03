@@ -556,6 +556,98 @@ Auto-save draft (NOT versioned, recoverable).
 
 ---
 
+## Sonix Integration Routes
+
+### GET /api/sonix/import
+
+List all media files from Sonix account (Admin only).
+
+**Query Parameters:**
+- `status` (optional): Filter by status (`completed`, `transcribing`, `aligning`, `failed`)
+- `page` (optional): Page number (default: 1)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "media": [
+      {
+        "id": "vK5prwBx",
+        "name": "1.3_what_type_of_cases (240p).mp4",
+        "language": "en",
+        "duration": 606,
+        "video": true,
+        "status": "completed",
+        "created_at": 1739849398,
+        "public_url": "https://sonix.ai/r/...",
+        "quality_score": "97.36",
+        "imported": false,
+        "audio_file_id": null
+      }
+    ],
+    "total_pages": 1,
+    "page": 1
+  }
+}
+```
+
+---
+
+### POST /api/sonix/import
+
+Import a transcript from Sonix into Max.
+
+**Request:**
+```json
+{
+  "sonix_media_id": "vK5prwBx",
+  "project_id": "uuid"  // Required if audio_file_id not provided
+  // OR
+  "audio_file_id": "uuid"  // Required if project_id not provided
+}
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "transcription_id": "uuid",
+    "audio_file_id": "uuid",
+    "project_id": "uuid",
+    "sonix_media_id": "vK5prwBx",
+    "duration": 606,
+    "segments_count": 45
+  }
+}
+```
+
+**Process:**
+1. Fetch media details from Sonix API
+2. Fetch transcript JSON from Sonix API
+3. Convert Sonix format to Max format (handles `start_time`/`end_time` → `start`/`end`)
+4. Create/update audio file record in `max_audio_files`
+5. Create transcription record in `max_transcriptions` with `source: 'sonix'`
+
+**Error (400):**
+```json
+{
+  "success": false,
+  "error": "Transcription not completed. Current status: transcribing"
+}
+```
+
+**Error (409):**
+```json
+{
+  "success": false,
+  "error": "Transcription already exists for this audio file"
+}
+```
+
+---
+
 ## Dictionary Routes
 
 ### GET /api/dictionary
@@ -1230,17 +1322,19 @@ const audioBuffer = await synthesizeVoice({
 
 ## Implementation Checklist
 
-- [ ] Implement all auth routes
-- [ ] Implement projects CRUD
-- [ ] Implement audio upload with progress tracking
-- [ ] Integrate Whisper transcription
-- [ ] Implement transcription editing + versioning
-- [ ] Implement dictionary system
-- [ ] Integrate Claude translation
-- [ ] Integrate Claude summary generation
-- [ ] Implement prompt template editing
+- [x] Implement all auth routes
+- [x] Implement projects CRUD
+- [x] Implement audio upload with progress tracking
+- [x] Integrate Whisper transcription
+- [x] Integrate Sonix transcription (v2.0.0)
+- [x] Implement transcription editing + versioning
+- [x] Implement dictionary system
+- [x] Integrate Claude translation
+- [x] Integrate Claude summary generation
+- [x] Implement prompt template editing
+- [x] Integrate ElevenLabs speech generation
 - [ ] Implement feedback logging
 - [ ] Add rate limiting
-- [ ] Add comprehensive error handling
-- [ ] Add request validation
-- [ ] Add audit logging
+- [x] Add comprehensive error handling
+- [x] Add request validation
+- [x] Add audit logging

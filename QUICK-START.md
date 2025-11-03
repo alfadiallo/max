@@ -6,11 +6,14 @@
 
 ## ✅ What's Done
 
-1. ✅ Next.js project initialized
+1. ✅ Next.js project initialized (v2.0.0)
 2. ✅ Authentication working (login/register/dashboard)
 3. ✅ Database tables created (13 max_ tables)
 4. ✅ All indexes created
 5. ✅ Project types seeded
+6. ✅ Sonix AI integration (v2.0.0)
+7. ✅ Video transcription support
+8. ✅ ElevenLabs speech generation
 
 ---
 
@@ -48,8 +51,10 @@ Once storage buckets are created:
    - Supabase Storage integration
    - Progress indicator
 
-3. **Build Whisper Integration**
-   - API endpoint for transcription
+3. **Build Transcription Integration**
+   - Whisper API endpoint for audio transcription
+   - Sonix integration for video transcription (v2.0.0)
+   - Import existing Sonix transcriptions
    - Display transcription results
    - Editor for corrections
 

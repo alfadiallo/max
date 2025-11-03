@@ -54,12 +54,13 @@
 - Database: `docs/technical/database.md` → "audio_files" table
 - Workflow: `docs/technical/architecture.md` → "Audio Upload Flow"
 
-### Transcription (Whisper)
+### Transcription (Whisper & Sonix)
 - Requirements: `docs/planning/prd.md` → "Transcription"
-- Endpoints: `docs/technical/api-routes.md` → "/api/transcribe"
+- Endpoints: `docs/technical/api-routes.md` → "/api/transcribe", "/api/sonix/import"
 - Database: `docs/technical/database.md` → "transcriptions" table
 - Workflow: `docs/technical/architecture.md` → "Transcription Flow"
-- Setup: `docs/technical/setup.md` → "Configure Whisper"
+- Setup: `docs/technical/setup.md` → "Configure Whisper & Sonix"
+- Sonix Integration: `docs/SONIX_TO_ELEVENLABS_WORKFLOW.md`
 
 ### Editing & Versioning
 - Requirements: `docs/planning/prd.md` → "Transcription Editing"

@@ -35,19 +35,22 @@
 Max is a specialized platform for Dr. Karla Soto that enables:
 
 ### Core Features
-- **Audio Upload** → Upload dental education recordings
-- **Transcription** → Automatic transcription via OpenAI Whisper
+- **Audio/Video Upload** → Upload dental education recordings (audio or video)
+- **Transcription** → Automatic transcription via OpenAI Whisper or Sonix AI
+- **Sonix Integration** → Import existing video transcriptions from Sonix account
 - **Editing** → User-friendly editor with auto-save & versioning
 - **Translation** → Translate to 8 languages (Spanish, Portuguese, French, German, Italian, Chinese, Hindi, Arabic)
 - **Summaries** → Generate professional summaries (Email, LinkedIn, Blog)
 - **Dictionary** → Manage dental terminology corrections
+- **Speech Generation** → Generate speech in multiple languages via ElevenLabs
 
 ### Tech Stack
-- **Frontend:** Next.js 13+, React 18, TypeScript, Tailwind CSS
+- **Frontend:** Next.js 14+, React 18, TypeScript, Tailwind CSS
 - **Backend:** Next.js API Routes
 - **Database:** Supabase (PostgreSQL)
 - **Storage:** Supabase Storage
-- **AI:** OpenAI Whisper, Anthropic Claude
+- **AI Services:** OpenAI Whisper, Sonix AI, Anthropic Claude
+- **TTS:** ElevenLabs
 - **Hosting:** Vercel + GoDaddy domain (usemax.io)
 
 ---
@@ -56,20 +59,27 @@ Max is a specialized platform for Dr. Karla Soto that enables:
 
 ### Main Workflow
 ```
-Audio Upload → Whisper Transcription (T-1)
+Audio/Video Upload → Whisper or Sonix Transcription (T-1)
          ↓
    User Edit & Version (H-1, H-2...)
          ↓
    Claude Translation → 8 Languages (H-1-es, H-1-pt...)
          ↓
    Summary Generation → Email/LinkedIn/Blog
+         ↓
+   Speech Generation → ElevenLabs Dubbing (optional)
 ```
 
 ### Versioning Strategy
-- **T-1:** Initial transcription (from Whisper)
+- **T-1:** Initial transcription (from Whisper or Sonix)
 - **H-1, H-2, ...** Human-edited transcriptions (new version each edit)
 - **H-1-es, H-1-pt, ...** Edited translations per language
 - All versions stored with full audit trail
+
+### Transcription Sources
+- **Whisper (OpenAI):** Audio transcription, fast and cost-effective
+- **Sonix AI:** Video transcription with word-level timestamps, better accuracy for longer content
+- Both formats are compatible with Max's editing and translation workflow
 
 ---
 
@@ -91,8 +101,10 @@ Audio Upload → Whisper Transcription (T-1)
 ### Prerequisites
 - Node.js 18+
 - Supabase account
-- OpenAI API key
-- Anthropic (Claude) API key
+- OpenAI API key (for Whisper transcription)
+- Sonix AI API key (optional, for video transcription)
+- Anthropic (Claude) API key (for translation)
+- ElevenLabs API key (optional, for speech generation)
 
 ### Setup Steps
 1. Clone repository
@@ -145,10 +157,12 @@ max/
 ## 🎯 Key Features
 
 ### 1. Transcription
-- Upload audio → Transcribe via Whisper
+- Upload audio/video → Transcribe via Whisper or Sonix
+- **Sonix Integration:** Import existing video transcriptions from your Sonix account
 - Edit with full version history
 - Auto-save every 5 minutes
 - Manual versioning (H-1, H-2, etc.)
+- Word-level timestamps for precise video sync
 
 ### 2. Translation
 - Translate to 8 languages using Claude
