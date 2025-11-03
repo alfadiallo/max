@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import OpenAI from 'openai'
+import { compressAudioServer } from '@/lib/utils/serverAudioCompression'
 
 // POST /api/audio/transcribe - Transcribe audio file using OpenAI Whisper
 export async function POST(req: NextRequest) {
@@ -125,22 +126,67 @@ export async function POST(req: NextRequest) {
     const fileSizeMB = audioBlob.size / 1024 / 1024
     console.log('Audio file size (downloaded):', fileSizeMB.toFixed(2), 'MB')
     
-    // Double-check after download (in case header was wrong)
+    // Convert blob to buffer for processing
+    const arrayBuffer = await audioBlob.arrayBuffer()
+    const audioBuffer = Buffer.from(arrayBuffer)
+    
+    // Check if compression is needed (file > 25MB)
     const OPENAI_MAX_SIZE = 25 * 1024 * 1024 // 25MB in bytes
-    if (audioBlob.size > OPENAI_MAX_SIZE) {
-      console.error('File size exceeds OpenAI limit after download:', fileSizeMB.toFixed(2), 'MB')
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Audio file is too large for transcription. File size: ${fileSizeMB.toFixed(2)}MB, Maximum: 25MB. Please compress the audio file or split it into smaller chunks.`,
-          details: `OpenAI Whisper API has a hard limit of 25MB per file. Your file is ${fileSizeMB.toFixed(2)}MB.`
-        },
-        { status: 413 }
-      )
+    let finalBuffer: Buffer = audioBuffer
+    let finalExtension = fileExtension
+    
+    if (audioBuffer.length > OPENAI_MAX_SIZE) {
+      console.log('File exceeds 25MB limit, compressing server-side...')
+      
+      try {
+        // Compress audio server-side
+        const compressedBuffer = await compressAudioServer(
+          audioBuffer,
+          audioFileRecord?.file_name || `audio${fileExtension}`,
+          {
+            targetSizeMB: 20, // Target 20MB (safe margin under 25MB)
+            format: 'mp3' // Always use MP3 for compression
+          }
+        )
+        
+        const compressedSizeMB = compressedBuffer.length / 1024 / 1024
+        console.log(`Compression successful: ${fileSizeMB.toFixed(2)}MB → ${compressedSizeMB.toFixed(2)}MB`)
+        
+        finalBuffer = compressedBuffer
+        finalExtension = '.mp3'
+        
+        // Check if compression was successful (still under limit)
+        if (compressedBuffer.length > OPENAI_MAX_SIZE) {
+          console.error('File still too large after compression:', compressedSizeMB.toFixed(2), 'MB')
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Audio file is too large even after compression. Compressed size: ${compressedSizeMB.toFixed(2)}MB, Maximum: 25MB. The audio file may be too long - please split it into smaller chunks.`,
+              details: `File reduced from ${fileSizeMB.toFixed(2)}MB to ${compressedSizeMB.toFixed(2)}MB but still exceeds limit.`
+            },
+            { status: 413 }
+          )
+        }
+      } catch (compressionError: any) {
+        console.error('Server-side compression failed:', compressionError)
+        // If compression fails, return error (don't try with original file)
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Failed to compress audio file. Original size: ${fileSizeMB.toFixed(2)}MB, Maximum: 25MB.`,
+            details: compressionError.message || 'Compression error occurred. Please compress the file manually or split it into smaller chunks.'
+          },
+          { status: 500 }
+        )
+      }
     }
     
-    // Use the original file extension so OpenAI can detect the format correctly
-    const audioFile = new File([audioBlob], `audio-${audio_file_id}${fileExtension}`, { type: audioBlob.type })
+    // Create File object from final buffer
+    const audioFile = new File(
+      [finalBuffer],
+      `audio-${audio_file_id}${finalExtension}`,
+      { type: finalExtension === '.mp3' ? 'audio/mpeg' : audioBlob.type }
+    )
 
     // Initialize OpenAI client with timeout
     const openai = new OpenAI({ 
