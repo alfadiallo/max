@@ -70,6 +70,19 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
 
       if (uploadError) {
         console.error('Storage upload error:', uploadError)
+        
+        // Provide helpful error message for file size issues
+        if (uploadError.message?.includes('maximum allowed size') || 
+            uploadError.message?.includes('exceeded') ||
+            uploadError.message?.includes('too large')) {
+          throw new Error(
+            `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). ` +
+            `Supabase Storage bucket limit may be set too low. ` +
+            `Please check your Supabase Storage bucket settings and increase the file size limit, ` +
+            `or upgrade to a Supabase plan that supports larger files.`
+          )
+        }
+        
         throw new Error(uploadError.message || 'Failed to upload file to storage')
       }
 
