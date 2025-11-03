@@ -163,7 +163,7 @@ export default function SonixImportPage() {
       }
 
       // Update media list
-      setMedia(prev => prev.map(m => 
+      setMedia(prev => (prev || []).map(m => 
         m.id === mediaId 
           ? { 
               ...m, 
