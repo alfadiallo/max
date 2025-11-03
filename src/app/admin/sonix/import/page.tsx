@@ -137,10 +137,10 @@ export default function SonixImportPage() {
     }
   }
 
-  const handleImport = async (mediaId: string) => {
+  const handleImport = async (mediaId: string): Promise<boolean> => {
     if (!projectId) {
       setMessage({ type: 'error', text: 'Please select a project' })
-      return
+      return false
     }
 
     setImporting(prev => new Set(prev).add(mediaId))
@@ -159,7 +159,7 @@ export default function SonixImportPage() {
       const result = await response.json()
 
       if (!result.success) {
-        throw new Error(result.error || 'Import failed')
+        throw new Error(result.error || result.details || 'Import failed')
       }
 
       // Update media list
@@ -185,12 +185,15 @@ export default function SonixImportPage() {
         next.delete(mediaId)
         return next
       })
+
+      return true
     } catch (error: any) {
       console.error('Import error:', error)
       setMessage({
         type: 'error',
         text: error.message || 'Failed to import media'
       })
+      return false
     } finally {
       setImporting(prev => {
         const next = new Set(prev)
@@ -214,17 +217,33 @@ export default function SonixImportPage() {
     const toImport = Array.from(selectedMedia)
     setMessage(null)
 
+    let successCount = 0
+    let errorCount = 0
+
     for (const mediaId of toImport) {
-      await handleImport(mediaId)
+      const success = await handleImport(mediaId)
+      if (success) {
+        successCount++
+      } else {
+        errorCount++
+      }
       // Small delay between imports to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 500))
     }
 
     setSelectedMedia(new Set())
-    setMessage({
-      type: 'success',
-      text: `Successfully imported ${toImport.length} media file(s)`
-    })
+    
+    if (errorCount > 0) {
+      setMessage({
+        type: 'error',
+        text: `Imported ${successCount} file(s), ${errorCount} failed. Check console for details.`
+      })
+    } else {
+      setMessage({
+        type: 'success',
+        text: `Successfully imported ${successCount} media file(s)`
+      })
+    }
   }
 
   const formatDuration = (seconds: number) => {
@@ -276,7 +295,7 @@ export default function SonixImportPage() {
           onChange={(e) => setProjectId(e.target.value)}
           className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
         >
-          {projects.map(project => (
+          {(projects || []).map(project => (
             <option key={project.id} value={project.id}>
               {project.name}
             </option>
