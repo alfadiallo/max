@@ -151,8 +151,11 @@ class SonixClient {
     if (options.file instanceof File) {
       formData.append('file', options.file)
     } else {
-      // For Buffer, create a Blob
-      const blob = new Blob([options.file], { type: 'application/octet-stream' })
+      // For Buffer, convert to Uint8Array and create a Blob
+      const uint8Array = Buffer.isBuffer(options.file) 
+        ? new Uint8Array(options.file) 
+        : new Uint8Array(options.file)
+      const blob = new Blob([uint8Array], { type: 'application/octet-stream' })
       formData.append('file', blob, options.name || 'audio.mp4')
     }
 
