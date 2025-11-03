@@ -337,8 +337,25 @@ export function convertSonixJSONToMaxFormat(
 
     // Build text from words if text field is missing, or use text field if present
     let segmentText = seg.text
-    if (!segmentText && Array.isArray(seg.words)) {
-      segmentText = seg.words.map((w: any) => w.text || w.word || '').join('').trim()
+    if (!segmentText && Array.isArray(seg.words) && seg.words.length > 0) {
+      // Sonix words may already include spaces (like " On", " this")
+      // So we join them directly without adding extra spaces
+      segmentText = seg.words.map((w: any) => {
+        const wordText = w.text || w.word || ''
+        return wordText
+      }).join('').trim()
+      
+      // If that resulted in empty or whitespace-only string, try trimming each word and joining with spaces
+      if (!segmentText || segmentText.length === 0) {
+        const wordTexts = seg.words.map((w: any) => {
+          const wordText = (w.text || w.word || '').trim()
+          return wordText
+        }).filter(w => w && w.length > 0)
+        
+        if (wordTexts.length > 0) {
+          segmentText = wordTexts.join(' ')
+        }
+      }
     }
     
     if (!segmentText || typeof segmentText !== 'string') {
@@ -378,10 +395,24 @@ export function convertSonixJSONToMaxFormat(
     : 0
 
   // Generate full text if not provided
-  const raw_text = sonixJSON.full_text || segments.map(s => s.text).join(' ')
+  let raw_text = sonixJSON.full_text
+  if (!raw_text || raw_text.trim().length === 0) {
+    // Build from segments
+    raw_text = segments.map(s => s.text).filter(t => t && t.trim().length > 0).join(' ')
+  }
 
   if (!raw_text || raw_text.trim().length === 0) {
-    throw new Error('Sonix transcript has no text content')
+    // Last resort: build from all words in all segments
+    const allWords = segments.flatMap(s => s.words || []).map(w => w.word).filter(w => w && w.trim().length > 0)
+    raw_text = allWords.join(' ')
+    
+    if (!raw_text || raw_text.trim().length === 0) {
+      throw new Error(
+        'Sonix transcript has no text content. ' +
+        `Found ${segments.length} segments with ${segments.reduce((sum, s) => sum + (s.words?.length || 0), 0)} total words. ` +
+        `Sample segment: ${JSON.stringify(segments[0] || {}).substring(0, 200)}`
+      )
+    }
   }
 
   return {
