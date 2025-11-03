@@ -319,8 +319,21 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    // Validate response structure
+    if (!sonixMedia || !sonixMedia.media || !Array.isArray(sonixMedia.media)) {
+      console.error('Unexpected Sonix API response structure:', sonixMedia)
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Unexpected response format from Sonix API',
+          details: 'The API response does not contain a valid media array. Please check the Sonix API documentation.'
+        },
+        { status: 500 }
+      )
+    }
+
     // Check which ones are already imported
-    const sonixMediaIds = sonixMedia.media.map(m => m.id)
+    const sonixMediaIds = sonixMedia.media.map(m => m.id).filter((id): id is string => !!id)
 
     let importedMap: Record<string, string> = {}
     if (sonixMediaIds.length > 0) {
