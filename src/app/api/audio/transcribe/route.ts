@@ -121,24 +121,59 @@ export async function POST(req: NextRequest) {
     let finalExtension = fileExtension
     
     if (audioBuffer.length > OPENAI_MAX_SIZE) {
-      console.log('File exceeds 25MB limit, compressing server-side...')
+      console.log(`File exceeds 25MB limit (${fileSizeMB.toFixed(2)}MB), calling Supabase Edge Function for compression...`)
       
       try {
-        // Compress audio server-side
-        const compressedBuffer = await compressAudioServer(
-          audioBuffer,
-          audioFileRecord?.file_name || `audio${fileExtension}`,
-          {
-            targetSizeMB: 20, // Target 20MB (safe margin under 25MB)
-            format: 'opus' // Use Opus for best compression (supported by Whisper)
-          }
-        )
+        // Call Supabase Edge Function for compression
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
         
+        if (!supabaseUrl || !supabaseServiceKey) {
+          throw new Error('Supabase URL or service key not configured')
+        }
+        
+        // Convert buffer to base64 for Edge Function
+        const audioBase64 = Buffer.from(audioBuffer).toString('base64')
+        
+        console.log('Calling compress-audio Edge Function...')
+        const edgeFunctionUrl = `${supabaseUrl}/functions/v1/compress-audio`
+        const compressResponse = await fetch(edgeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseServiceKey}`
+          },
+          body: JSON.stringify({
+            audio_data: audioBase64,
+            filename: audioFileRecord?.file_name || `audio${fileExtension}`,
+            target_size_mb: 20
+          })
+        })
+        
+        const compressResult = await compressResponse.json()
+        
+        if (!compressResult.success) {
+          console.error('Edge Function compression failed:', compressResult)
+          return NextResponse.json(
+            {
+              success: false,
+              error: compressResult.error || 'Compression failed',
+              details: compressResult.details || compressResult.suggestion || 'Failed to compress audio file',
+              original_size_mb: fileSizeMB.toFixed(2)
+            },
+            { status: compressResponse.status || 500 }
+          )
+        }
+        
+        // Decode compressed audio from base64
+        const compressedBase64 = compressResult.audio_data
+        const compressedBuffer = Buffer.from(compressedBase64, 'base64')
         const compressedSizeMB = compressedBuffer.length / 1024 / 1024
-        console.log(`Compression successful: ${fileSizeMB.toFixed(2)}MB → ${compressedSizeMB.toFixed(2)}MB`)
+        
+        console.log(`✅ Compression successful: ${fileSizeMB.toFixed(2)}MB → ${compressedSizeMB.toFixed(2)}MB (bitrate: ${compressResult.bitrate_used || 'unknown'})`)
         
         finalBuffer = compressedBuffer
-        finalExtension = '.ogg' // Opus uses OGG container
+        finalExtension = `.${compressResult.extension || 'ogg'}` // Opus uses OGG container
         
         // Check if compression was successful (still under limit)
         if (compressedBuffer.length > OPENAI_MAX_SIZE) {
@@ -147,37 +182,21 @@ export async function POST(req: NextRequest) {
             {
               success: false,
               error: `Audio file is too large even after compression. Compressed size: ${compressedSizeMB.toFixed(2)}MB, Maximum: 25MB. The audio file may be too long - please split it into smaller chunks.`,
-              details: `File reduced from ${fileSizeMB.toFixed(2)}MB to ${compressedSizeMB.toFixed(2)}MB but still exceeds limit.`
+              details: `File reduced from ${fileSizeMB.toFixed(2)}MB to ${compressedSizeMB.toFixed(2)}MB but still exceeds limit. This typically happens with very long audio files (> 2 hours).`
             },
             { status: 413 }
           )
         }
       } catch (compressionError: any) {
-        console.error('❌ Server-side compression failed:', compressionError)
+        console.error('❌ Compression failed:', compressionError)
         console.error('Compression error details:', compressionError.message, compressionError.stack)
-        
-        // If compression fails (e.g., FFmpeg not available), provide helpful error
-        const isFFmpegError = compressionError.message?.includes('FFmpeg') || 
-                             compressionError.message?.includes('ffmpeg') ||
-                             compressionError.code === 'ENOENT' ||
-                             compressionError.message?.includes('ENOENT')
-        
-        if (isFFmpegError) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: `Server-side compression is not available. File size: ${fileSizeMB.toFixed(2)}MB, Maximum: 25MB.`,
-              details: 'FFmpeg is not available on the server. Please compress the file before uploading or delete and re-upload to use client-side compression. The file must be under 25MB to transcribe.'
-            },
-            { status: 500 }
-          )
-        }
         
         return NextResponse.json(
           {
             success: false,
             error: `Failed to compress audio file. Original size: ${fileSizeMB.toFixed(2)}MB, Maximum: 25MB.`,
-            details: compressionError.message || 'Compression error occurred. Please compress the file manually or split it into smaller chunks.'
+            details: compressionError.message || 'Compression error occurred. Please compress the file manually or split it into smaller chunks.',
+            suggestion: 'Try deleting and re-uploading the file to use client-side compression, or compress it manually before uploading.'
           },
           { status: 500 }
         )
