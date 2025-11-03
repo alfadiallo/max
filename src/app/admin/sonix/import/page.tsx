@@ -178,7 +178,20 @@ export default function SonixImportPage() {
       }
 
       if (!result.success) {
-        throw new Error(result.error || result.details || 'Import failed')
+        // Build detailed error message
+        let errorMsg = result.error || 'Import failed'
+        if (result.details) {
+          errorMsg += `: ${result.details}`
+        }
+        if (result.transcript_keys) {
+          errorMsg += `\n\nReceived transcript keys: ${result.transcript_keys.join(', ')}`
+        }
+        if (result.transcript_preview) {
+          errorMsg += `\n\nTranscript preview:\n${result.transcript_preview}`
+        }
+        
+        console.error('Import error details:', result)
+        throw new Error(errorMsg)
       }
 
       // Validate response data structure

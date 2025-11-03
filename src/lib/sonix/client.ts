@@ -140,16 +140,43 @@ class SonixClient {
       throw new Error(`Sonix API returned non-JSON response (${contentType}): ${text.substring(0, 200)}`)
     }
 
-    const json = await response.json()
+    let json = await response.json()
     
-    // Handle wrapped responses (some APIs wrap the data)
-    if (json.data && (json.data.segments || Array.isArray(json.data))) {
-      return json.data
+    // Handle case where response is directly an array of segments
+    if (Array.isArray(json)) {
+      return {
+        segments: json,
+        full_text: json.map((seg: any) => seg.text || '').join(' ')
+      }
     }
     
-    // Handle direct response
-    if (json.segments || Array.isArray(json)) {
-      return json
+    // Handle wrapped responses (some APIs wrap the data)
+    if (json.data) {
+      if (Array.isArray(json.data)) {
+        return {
+          segments: json.data,
+          full_text: json.data.map((seg: any) => seg.text || '').join(' ')
+        }
+      }
+      if (json.data.segments || Array.isArray(json.data)) {
+        return json.data
+      }
+    }
+    
+    // Handle direct response with segments property
+    if (json.segments) {
+      if (Array.isArray(json.segments)) {
+        return json
+      }
+    }
+    
+    // Try alternative property names
+    const altSegments = (json as any).transcript || (json as any).chunks
+    if (Array.isArray(altSegments)) {
+      return {
+        segments: altSegments,
+        full_text: altSegments.map((seg: any) => seg.text || '').join(' ')
+      }
     }
 
     // Log unexpected structure for debugging
@@ -157,8 +184,10 @@ class SonixClient {
     
     throw new Error(
       `Unexpected Sonix transcript response format. ` +
-      `Expected segments array. ` +
-      `Received keys: ${Object.keys(json).join(', ')}`
+      `Expected segments array or object with segments property. ` +
+      `Received type: ${typeof json}, ` +
+      `Is array: ${Array.isArray(json)}, ` +
+      `Keys: ${Object.keys(json).join(', ')}`
     )
   }
 

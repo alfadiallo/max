@@ -107,12 +107,20 @@ export async function POST(req: NextRequest) {
       })
     } catch (conversionError: any) {
       console.error('Conversion error:', conversionError)
+      console.error('Conversion error stack:', conversionError.stack)
       console.error('Sonix transcript structure:', JSON.stringify(sonixTranscript, null, 2))
+      console.error('Sonix transcript keys:', Object.keys(sonixTranscript || {}))
+      console.error('Sonix transcript type:', typeof sonixTranscript)
+      console.error('Is array?', Array.isArray(sonixTranscript))
+      
       return NextResponse.json(
         {
           success: false,
           error: 'Failed to convert Sonix transcript format',
-          details: conversionError.message || 'Invalid transcript structure from Sonix'
+          details: conversionError.message || 'Invalid transcript structure from Sonix',
+          transcript_keys: Object.keys(sonixTranscript || {}),
+          transcript_type: typeof sonixTranscript,
+          transcript_preview: JSON.stringify(sonixTranscript, null, 2).substring(0, 1000)
         },
         { status: 500 }
       )
