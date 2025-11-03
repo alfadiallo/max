@@ -115,9 +115,31 @@ serve(async (req) => {
       )
     }
 
+    // Check file size before attempting compression
+    // Edge Functions have memory limits (~256-512MB), so very large files may fail
+    const EDGE_FUNCTION_MEMORY_LIMIT = 200 * 1024 * 1024 // 200MB safe limit
+    if (audioBuffer.length > EDGE_FUNCTION_MEMORY_LIMIT) {
+      console.warn(`File too large for Edge Function memory limit: ${originalSizeMB.toFixed(2)}MB`)
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'File too large for server-side compression',
+          details: `File size (${originalSizeMB.toFixed(2)}MB) exceeds Edge Function memory limits. Please use client-side compression by deleting and re-uploading the file.`,
+          suggestion: 'Delete this file and re-upload it - client-side compression will automatically compress it before upload.',
+          original_size: audioBuffer.length,
+          original_size_mb: originalSizeMB.toFixed(2)
+        }),
+        { 
+          status: 413, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
+    }
+    
     // Use FFmpeg.wasm for Deno
     // Note: FFmpeg.wasm requires SharedArrayBuffer which needs COOP/COEP headers
     // For Edge Functions, we'll use a Deno-compatible approach
+    // WARNING: FFmpeg.wasm + large files can exceed Edge Function memory limits
     
     try {
       // Import FFmpeg.wasm for Deno
@@ -255,18 +277,26 @@ serve(async (req) => {
     } catch (ffmpegError: any) {
       console.error('FFmpeg.wasm error:', ffmpegError)
       
+      // Check if it's a memory error
+      const isMemoryError = ffmpegError.message?.includes('memory') || 
+                           ffmpegError.message?.includes('Memory') ||
+                           ffmpegError.message?.includes('out of memory') ||
+                           originalSizeMB > 100
+      
       // Fallback: Return helpful error
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Compression failed in Edge Function',
-          details: ffmpegError.message || 'FFmpeg.wasm not available or failed to process audio',
-          suggestion: 'Please compress the file before uploading or delete and re-upload to use client-side compression.',
+          error: isMemoryError ? 'Memory limit exceeded in Edge Function' : 'Compression failed in Edge Function',
+          details: isMemoryError 
+            ? `File size (${originalSizeMB.toFixed(2)}MB) is too large for Edge Function memory limits. FFmpeg.wasm and large audio files require significant memory.`
+            : ffmpegError.message || 'FFmpeg.wasm not available or failed to process audio',
+          suggestion: 'Delete this file and re-upload it - client-side compression will automatically compress files > 20MB before upload. This avoids memory limits.',
           original_size: audioBuffer.length,
           original_size_mb: originalSizeMB.toFixed(2)
         }),
         { 
-          status: 500, 
+          status: isMemoryError ? 413 : 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       )
