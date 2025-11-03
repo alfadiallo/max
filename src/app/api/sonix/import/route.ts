@@ -70,7 +70,11 @@ export async function POST(req: NextRequest) {
       sonixTranscript = await sonixClient.getTranscript(sonix_media_id)
       console.log('Transcript fetched:', { 
         segments_count: sonixTranscript.segments?.length || 0,
-        has_full_text: !!sonixTranscript.full_text
+        has_full_text: !!sonixTranscript.full_text,
+        transcript_keys: Object.keys(sonixTranscript || {}),
+        transcript_type: typeof sonixTranscript,
+        is_array: Array.isArray(sonixTranscript),
+        first_1000_chars: JSON.stringify(sonixTranscript, null, 2).substring(0, 1000)
       })
     } catch (error: any) {
       console.error('Sonix API error:', error)
