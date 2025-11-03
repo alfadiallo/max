@@ -167,6 +167,9 @@ class SonixClient {
     if (json.segments) {
       if (Array.isArray(json.segments)) {
         return json
+      } else {
+        // segments exists but is not an array - this is unexpected
+        console.error('Sonix transcript has segments property but it is not an array:', typeof json.segments)
       }
     }
     

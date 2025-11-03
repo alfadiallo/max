@@ -268,21 +268,33 @@ export function convertSonixJSONToMaxFormat(
   }
 
   // Check if segments exist and is an array
-  if (!sonixJSON.segments) {
+  if (!sonixJSON.segments || sonixJSON.segments === undefined || sonixJSON.segments === null) {
     // Try alternative property names that Sonix might use
     const altSegments = (sonixJSON as any).transcript?.segments || 
                        (sonixJSON as any).data?.segments ||
-                       (sonixJSON as any).chunks
+                       (sonixJSON as any).chunks ||
+                       (sonixJSON as any).transcript // Maybe transcript is directly an array
     
     if (Array.isArray(altSegments)) {
       sonixJSON.segments = altSegments
     } else {
+      // Log the actual structure for debugging
+      const structurePreview = JSON.stringify(sonixJSON, null, 2).substring(0, 1000)
       throw new Error(
         `Invalid Sonix transcript format: missing segments array. ` +
         `Received keys: ${Object.keys(sonixJSON).join(', ')}. ` +
-        `Full structure: ${JSON.stringify(sonixJSON, null, 2).substring(0, 500)}`
+        `Full structure: ${structurePreview}`
       )
     }
+  }
+  
+  // Ensure segments is actually an array (could be undefined if property exists but is undefined)
+  if (sonixJSON.segments === undefined || sonixJSON.segments === null) {
+    throw new Error(
+      `Invalid Sonix transcript format: segments is ${sonixJSON.segments}. ` +
+      `Received keys: ${Object.keys(sonixJSON).join(', ')}. ` +
+      `Full structure: ${JSON.stringify(sonixJSON, null, 2).substring(0, 500)}`
+    )
   }
 
   if (!Array.isArray(sonixJSON.segments)) {
@@ -295,6 +307,14 @@ export function convertSonixJSONToMaxFormat(
 
   if (sonixJSON.segments.length === 0) {
     throw new Error('Sonix transcript contains no segments')
+  }
+
+  // Double-check segments is still valid (shouldn't happen, but safety check)
+  if (!Array.isArray(sonixJSON.segments)) {
+    throw new Error(
+      `Invalid segments: expected array but got ${typeof sonixJSON.segments}. ` +
+      `Value: ${JSON.stringify(sonixJSON.segments).substring(0, 200)}`
+    )
   }
 
   // Validate and convert segments
