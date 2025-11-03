@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { FolderOpen, Sparkles, Search, Bot, FileSearch, Edit3, Users } from 'lucide-react'
+import { FolderOpen, Sparkles, Search, Bot, FileSearch, Edit3, Users, Video } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
@@ -103,13 +103,23 @@ export default function DashboardPage() {
             </a>
 
             {isAdmin && (
-              <a href="/admin/users" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800 border-2 border-blue-300 dark:border-blue-500">
-                <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
-                  <Users className="h-5 w-5" />
-                  Manage Users
-                </h3>
-                <p className="text-gray-600 dark:text-gray-300">Invite and manage team members</p>
-              </a>
+              <>
+                <a href="/admin/sonix/import" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800 border-2 border-green-300 dark:border-green-500">
+                  <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
+                    <Video className="h-5 w-5" />
+                    Import from Sonix
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-300">Import existing video transcriptions</p>
+                </a>
+
+                <a href="/admin/users" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800 border-2 border-blue-300 dark:border-blue-500">
+                  <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
+                    <Users className="h-5 w-5" />
+                    Manage Users
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-300">Invite and manage team members</p>
+                </a>
+              </>
             )}
           </div>
         </div>

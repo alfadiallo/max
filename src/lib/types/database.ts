@@ -44,13 +44,40 @@ export interface MaxAudioFile {
   created_at: string
   updated_at: string
   archived: boolean
+  // Sonix integration fields (v2.0.0)
+  sonix_media_id?: string | null
+  file_type?: 'audio' | 'video'
+  sonix_status?: string | null
 }
 
+/**
+ * Transcription segment with word-level timestamps (Sonix-style format)
+ * Words are nested within segments, not in a separate flattened array
+ */
 export interface TranscriptionSegment {
-  start: number
-  end: number
+  id: number
+  seek?: number // milliseconds (optional, for backward compatibility)
+  start: number // seconds (decimal)
+  end: number   // seconds (decimal)
   text: string
-  speaker: string
+  words?: Array<{
+    word: string
+    start: number
+    end: number
+  }> // Word-level timestamps nested in segment (Sonix format)
+  speaker?: string // Optional, for backward compatibility
+}
+
+/**
+ * JSON structure for json_with_timestamps (Sonix-style format)
+ * No flattened words array - words are nested in segments
+ */
+export interface TranscriptionTimestampData {
+  segments: TranscriptionSegment[]
+  metadata?: {
+    source?: 'whisper' | 'sonix'
+    [key: string]: any
+  }
 }
 
 export interface MaxTranscription {
@@ -59,7 +86,9 @@ export interface MaxTranscription {
   transcription_type: string
   language_code: string
   raw_text: string
-  json_with_timestamps: TranscriptionSegment[]
+  json_with_timestamps: TranscriptionTimestampData
+  source?: 'whisper' | 'sonix' // Transcription service source (v2.0.0)
+  final_version_id?: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -71,7 +100,8 @@ export interface MaxTranscriptionVersion {
   version_number: number
   version_type: string
   edited_text: string
-  json_with_timestamps: TranscriptionSegment[] | null
+  json_with_timestamps: TranscriptionTimestampData | null
+  dictionary_corrections_applied?: any | null
   diff_from_previous: string | null
   edited_by: string
   created_at: string
@@ -94,8 +124,9 @@ export interface MaxTranslation {
   transcription_id: string
   language_code: string
   translated_text: string
-  json_with_timestamps: TranscriptionSegment[] | null
+  json_with_timestamps: TranscriptionTimestampData | null
   dictionary_corrections_applied: any | null
+  final_version_id?: string | null
   created_at: string
   updated_at: string
 }
@@ -106,7 +137,7 @@ export interface MaxTranslationVersion {
   version_number: number
   version_type: string
   edited_text: string
-  json_with_timestamps: TranscriptionSegment[] | null
+  json_with_timestamps: TranscriptionTimestampData | null
   diff_from_previous: string | null
   edited_by: string
   created_at: string

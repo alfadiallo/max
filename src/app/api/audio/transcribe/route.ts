@@ -343,13 +343,9 @@ export async function POST(req: NextRequest) {
             start: seg.start,
             end: seg.end,
             text: seg.text,
-            words: seg.words || []
+            words: seg.words || [] // Word-level timestamps nested in segments (Sonix-style format)
           })),
-          words: words.map((word: any) => ({
-            word: word.word,
-            start: word.start,
-            end: word.end
-          })),
+          // No flattened words array - using Sonix nested format
           metadata
         },
         created_by: user.id
