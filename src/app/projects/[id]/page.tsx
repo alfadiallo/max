@@ -52,6 +52,11 @@ export default function ProjectDetailPage() {
     setTranscribingFiles(prev => new Set(prev).add(audioFile.id))
     
     try {
+      console.log('Starting transcription for:', audioFile.file_name)
+      console.log('Audio URL:', audioFile.file_url)
+      console.log('File size:', (audioFile.file_size_bytes / 1024 / 1024).toFixed(2), 'MB')
+      
+      const startTime = Date.now()
       const response = await fetch('/api/audio/transcribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -61,7 +66,24 @@ export default function ProjectDetailPage() {
         })
       })
 
+      const duration = Date.now() - startTime
+      console.log('Transcription request took:', duration / 1000, 'seconds')
+      console.log('Response status:', response.status, response.statusText)
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        console.error('Server returned non-JSON response:', text.substring(0, 500))
+        alert(
+          `Transcription failed: Server returned ${response.status} ${response.statusText}.\n\n` +
+          `This usually means a server timeout or error. Check the browser console (F12) for more details.`
+        )
+        return
+      }
+
       const result = await response.json()
+      console.log('Transcription result:', result)
 
       if (result.success) {
         alert('Transcription complete!')
@@ -70,10 +92,27 @@ export default function ProjectDetailPage() {
       } else {
         const errorMsg = result.error || 'Unknown error'
         const details = result.details ? `\n\nDetails: ${result.details}` : ''
-        alert(`Transcription failed: ${errorMsg}${details}`)
+        const type = result.type ? `\n\nType: ${result.type}` : ''
+        
+        console.error('Transcription failed:', errorMsg, details, type)
+        alert(`Transcription failed: ${errorMsg}${details}${type}`)
       }
     } catch (error: any) {
-      alert(`Transcription error: ${error.message}`)
+      console.error('Transcription fetch error:', error)
+      console.error('Error name:', error.name)
+      console.error('Error message:', error.message)
+      console.error('Error stack:', error.stack)
+      
+      // More detailed error message
+      let errorMessage = error.message || 'Unknown error'
+      
+      if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+        errorMessage = 'Network error: Unable to reach the server. Please check your internet connection.'
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Request timed out. The audio file may be too large or the server is busy.'
+      }
+      
+      alert(`Transcription error: ${errorMessage}\n\nCheck the browser console (F12) for more details.`)
     } finally {
       setTranscribingFiles(prev => {
         const next = new Set(prev)
