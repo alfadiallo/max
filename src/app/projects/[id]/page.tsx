@@ -68,7 +68,9 @@ export default function ProjectDetailPage() {
         // Reload audio files to show transcription
         await loadAudioFiles()
       } else {
-        alert(`Transcription failed: ${result.error}`)
+        const errorMsg = result.error || 'Unknown error'
+        const details = result.details ? `\n\nDetails: ${result.details}` : ''
+        alert(`Transcription failed: ${errorMsg}${details}`)
       }
     } catch (error: any) {
       alert(`Transcription error: ${error.message}`)

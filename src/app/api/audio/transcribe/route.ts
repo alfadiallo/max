@@ -55,33 +55,124 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Download audio file from Supabase Storage
-    const audioResponse = await fetch(audio_url)
+    // Download audio file from Supabase Storage with timeout
+    console.log('Downloading audio file from:', audio_url)
+    const downloadStartTime = Date.now()
+    
+    // Set a timeout for the download (30 seconds)
+    const downloadController = new AbortController()
+    const downloadTimeout = setTimeout(() => downloadController.abort(), 30000)
+    
+    let audioResponse: Response
+    try {
+      audioResponse = await fetch(audio_url, { 
+        signal: downloadController.signal 
+      })
+      clearTimeout(downloadTimeout)
+    } catch (fetchError: any) {
+      clearTimeout(downloadTimeout)
+      if (fetchError.name === 'AbortError') {
+        console.error('Audio file download timed out after 30 seconds')
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Audio file download timed out. The file may be too large or the connection is slow.',
+            details: 'Try uploading a smaller file or check your internet connection.'
+          },
+          { status: 504 }
+        )
+      }
+      throw fetchError
+    }
+    
     if (!audioResponse.ok) {
+      console.error('Failed to download audio:', audioResponse.status, audioResponse.statusText)
       return NextResponse.json(
-        { success: false, error: 'Failed to download audio file' },
+        { 
+          success: false, 
+          error: `Failed to download audio file: ${audioResponse.status} ${audioResponse.statusText}` 
+        },
         { status: 500 }
       )
     }
 
+    console.log('Download completed in:', Date.now() - downloadStartTime, 'ms')
+    
     const audioBlob = await audioResponse.blob()
+    const fileSizeMB = audioBlob.size / 1024 / 1024
+    console.log('Audio file size:', fileSizeMB.toFixed(2), 'MB')
+    
+    // Check file size (OpenAI has a 25MB limit, but we'll be more lenient with error message)
+    if (fileSizeMB > 25) {
+      console.warn('File size exceeds OpenAI recommended limit (25MB):', fileSizeMB, 'MB')
+    }
+    
     // Use the original file extension so OpenAI can detect the format correctly
     const audioFile = new File([audioBlob], `audio-${audio_file_id}${fileExtension}`, { type: audioBlob.type })
 
-    // Initialize OpenAI client
-    const openai = new OpenAI({ apiKey: OPENAI_API_KEY })
+    // Initialize OpenAI client with timeout
+    const openai = new OpenAI({ 
+      apiKey: OPENAI_API_KEY,
+      timeout: 300000, // 5 minutes timeout for OpenAI API call
+      maxRetries: 2
+    })
 
     // Call OpenAI Whisper API with verbose_json for timestamps
+    console.log('Calling OpenAI Whisper API...')
     const startTime = Date.now()
-    const transcription = await openai.audio.transcriptions.create({
-      file: audioFile,
-      model: 'whisper-1',
-      language: 'en',
-      response_format: 'verbose_json', // This gives us word-level timestamps
-      timestamp_granularities: ['segment', 'word'] // Enable both segment and word-level timestamps
-    })
+    
+    let transcription
+    try {
+      transcription = await openai.audio.transcriptions.create({
+        file: audioFile,
+        model: 'whisper-1',
+        language: 'en',
+        response_format: 'verbose_json', // This gives us word-level timestamps
+        timestamp_granularities: ['segment', 'word'] // Enable both segment and word-level timestamps
+      })
+    } catch (openaiError: any) {
+      console.error('OpenAI API error:', openaiError)
+      
+      // Handle specific OpenAI errors
+      if (openaiError.status === 429) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'OpenAI API rate limit exceeded. Please try again in a few minutes.',
+            details: openaiError.message
+          },
+          { status: 429 }
+        )
+      }
+      
+      if (openaiError.message?.includes('timeout') || openaiError.code === 'ECONNABORTED') {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Transcription request timed out. The audio file may be too large. Try a shorter audio file or split it into smaller chunks.',
+            details: openaiError.message
+          },
+          { status: 504 }
+        )
+      }
+      
+      if (openaiError.message?.includes('file size')) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Audio file is too large for transcription. Maximum file size is 25MB. Please compress or split the file.',
+            details: openaiError.message
+          },
+          { status: 413 }
+        )
+      }
+      
+      throw openaiError // Re-throw to be caught by outer catch
+    }
+    
     const endTime = Date.now()
     const transcriptionTimeMs = endTime - startTime
+    console.log('Transcription completed in:', transcriptionTimeMs / 1000, 'seconds')
 
     if (!transcription) {
       console.error('OpenAI Whisper error: No transcription returned')
@@ -158,13 +249,41 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error('Transcription error:', error)
+    console.error('Error type:', typeof error)
+    console.error('Error stack:', error?.stack)
+    
+    // Provide more specific error messages
+    let errorMessage = 'Transcription failed'
+    let statusCode = 500
+    
+    if (error.message) {
+      errorMessage = error.message
+    }
+    
+    // Handle timeout errors specifically
+    if (error.message?.includes('timeout') || 
+        error.name === 'TimeoutError' ||
+        error.code === 'ECONNABORTED') {
+      errorMessage = 'Transcription request timed out. The audio file may be too large or the service is busy. Please try again or use a shorter audio file.'
+      statusCode = 504
+    }
+    
+    // Handle connection errors
+    if (error.message?.includes('connection') || 
+        error.code === 'ECONNREFUSED' ||
+        error.code === 'ETIMEDOUT') {
+      errorMessage = 'Connection error: Unable to reach the transcription service. Please check your internet connection and try again.'
+      statusCode = 503
+    }
+    
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message || 'Transcription failed',
-        details: error.details || error.hint || error.code
+        error: errorMessage,
+        details: error.details || error.hint || error.code || 'Unknown error',
+        type: error.name || 'Error'
       },
-      { status: 500 }
+      { status: statusCode }
     )
   }
 }
