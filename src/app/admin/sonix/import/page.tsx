@@ -156,14 +156,30 @@ export default function SonixImportPage() {
         })
       })
 
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        throw new Error(`Server returned ${response.status} ${response.statusText}. ${text.substring(0, 200)}`)
+      }
+
       const result = await response.json()
 
-      if (!result.success) {
-        throw new Error(result.error || result.details || 'Import failed')
+      if (!result || !result.success) {
+        throw new Error(result?.error || result?.details || 'Import failed')
+      }
+
+      // Validate response data structure
+      if (!result.data) {
+        throw new Error('Invalid response format from server')
       }
 
       // Update media list
-      setMedia(prev => (prev || []).map(m => 
+      setMedia(prev => {
+        if (!prev || !Array.isArray(prev)) {
+          return []
+        }
+        return prev.map(m => 
         m.id === mediaId 
           ? { 
               ...m, 
@@ -172,11 +188,17 @@ export default function SonixImportPage() {
               project_id: result.data.project_id
             }
           : m
-      ))
+        )
+      })
+
+      // Find the media item name safely
+      const currentMedia = media || []
+      const importedItem = currentMedia.find(m => m.id === mediaId)
+      const itemName = importedItem?.name || 'media file'
 
       setMessage({
         type: 'success',
-        text: `Successfully imported "${(media || []).find(m => m.id === mediaId)?.name || 'media file'}"`
+        text: `Successfully imported "${itemName}"`
       })
 
       // Clear selection
