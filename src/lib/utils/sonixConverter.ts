@@ -350,7 +350,7 @@ export function convertSonixJSONToMaxFormat(
         const wordTexts = seg.words.map((w: any) => {
           const wordText = (w.text || w.word || '').trim()
           return wordText
-        }).filter(w => w && w.length > 0)
+        }).filter((w: string) => w && w.length > 0)
         
         if (wordTexts.length > 0) {
           segmentText = wordTexts.join(' ')
