@@ -90,7 +90,7 @@ export default function SonixImportPage() {
     setMessage(null)
 
     try {
-      const response = await fetch('/api/sonix/import/list?status=completed')
+      const response = await fetch('/api/sonix/import?status=completed')
       
       // Check if response is JSON
       const contentType = response.headers.get('content-type')

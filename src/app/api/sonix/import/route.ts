@@ -257,7 +257,7 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * GET /api/sonix/import/list
+ * GET /api/sonix/import
  * 
  * List all media files from Sonix account
  */
