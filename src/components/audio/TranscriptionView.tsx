@@ -659,7 +659,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           // Split each sentence into words and match sequentially
           let wordIdx = 0
           
-          sentences.forEach((sentence, sentIdx) => {
+          sentences.forEach((sentence: string, sentIdx: number) => {
             const sentenceText = sentence.trim()
             if (!sentenceText) return
             
