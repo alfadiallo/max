@@ -15,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // Verify the translation exists and user has access
     const { data: translation, error: fetchError } = await supabase
       .from('max_translations')
-      .select('id, transcription_id, language_code')
+      .select('id, transcription_id, language_code, final_version_id')
       .eq('id', translationId)
       .single()
 
