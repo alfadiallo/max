@@ -645,7 +645,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       
       // Split by sentence endings (. ! ?) but be careful with abbreviations
       // Split on . ! ? followed by space and capital letter, or end of string
-      const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z][a-z])|(?<=[.!?])\s*$/).filter(s => s.trim())
+      const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z][a-z])|(?<=[.!?])\s*$/).filter((s: string) => s.trim())
       
       if (sentences.length <= 1) {
         // Already one sentence, keep as is
@@ -847,7 +847,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       const translationText = translationSeg.text || ''
       const translationSentences = translationText
         .split(/(?<=[.!?])\s+(?=[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ])/i)
-        .filter(s => s.trim())
+        .filter((s: string) => s.trim())
       
       // For each split English sentence, create a matching translation segment
       splitEnglishForThisSegment.forEach((splitEngSeg: any, sentIdx: number) => {
@@ -2153,7 +2153,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                                     const translationText = translation.translated_text
                                     const translationSentences = translationText
                                       .split(/(?<=[.!?])\s+(?=[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ])/i)
-                                      .filter(s => s.trim())
+                                      .filter((s: string) => s.trim())
                                     
                                     // Map each English sentence to a translation sentence
                                     translationSegs = splitEnglish.map((engSeg: any, idx: number) => ({
