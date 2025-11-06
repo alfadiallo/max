@@ -632,7 +632,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     }
   }
 
-  // Helper function to split text by sentences (1-2 sentences per segment)
+  // Helper function to split text by sentences (1 sentence per segment) using word-level timestamps
   const splitSegmentsBySentences = (segments: any[]): any[] => {
     const splitSegments: any[] = []
     
@@ -645,49 +645,95 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       
       // Split by sentence endings (. ! ?) but be careful with abbreviations
       // Split on . ! ? followed by space and capital letter, or end of string
-      // This handles most cases including abbreviations followed by proper sentences
       const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z][a-z])|(?<=[.!?])\s*$/).filter(s => s.trim())
       
       if (sentences.length <= 1) {
-        // Already short enough, keep as is
+        // Already one sentence, keep as is
         splitSegments.push({ ...seg })
       } else {
-        // Split into 1-2 sentence chunks
-        const segmentDuration = seg.end - seg.start
-        const avgSentenceDuration = segmentDuration / sentences.length
+        // Use word-level timestamps if available for accurate timing
+        const words = seg.words || []
         
-        let currentStart = seg.start
-        let currentSentences: string[] = []
-        
-        sentences.forEach((sentence, idx) => {
-          currentSentences.push(sentence.trim())
+        if (words.length > 0) {
+          // Build word-to-sentence mapping by matching word order to sentences
+          // Split each sentence into words and match sequentially
+          let wordIdx = 0
           
-          // Group into 1-2 sentences per segment
-          const shouldCreateSegment = 
-            currentSentences.length === 2 || // 2 sentences collected
-            idx === sentences.length - 1 || // Last sentence
-            (currentSentences.length === 1 && idx === sentences.length - 1) // Only one sentence left
-          
-          if (shouldCreateSegment) {
-            const segmentText = currentSentences.join(' ')
-            const sentenceCount = currentSentences.length
-            const segmentDuration = avgSentenceDuration * sentenceCount
-            const segmentEnd = Math.min(currentStart + segmentDuration, seg.end)
+          sentences.forEach((sentence, sentIdx) => {
+            const sentenceText = sentence.trim()
+            if (!sentenceText) return
+            
+            // Split sentence into words (remove punctuation for matching)
+            const sentenceWordsText = sentenceText
+              .replace(/[.,!?;:]/g, ' ')
+              .split(/\s+/)
+              .filter(w => w.length > 0)
+            
+            // Find words that belong to this sentence (sequential matching)
+            const sentenceWords: any[] = []
+            const wordsToMatch = sentenceWordsText.length
+            
+            // Match words sequentially - each sentence gets the next N words
+            for (let i = 0; i < wordsToMatch && wordIdx < words.length; i++) {
+              sentenceWords.push(words[wordIdx])
+              wordIdx++
+            }
+            
+            // Calculate sentence timestamps from word timestamps
+            let sentenceStartTime = seg.start
+            let sentenceEndTime = seg.end
+            
+            if (sentenceWords.length > 0) {
+              // Use first word's start and last word's end
+              sentenceStartTime = sentenceWords[0].start || seg.start
+              sentenceEndTime = sentenceWords[sentenceWords.length - 1].end || seg.end
+            } else {
+              // Fallback: proportional distribution if no words matched
+              const segmentDuration = seg.end - seg.start
+              const avgSentenceDuration = segmentDuration / sentences.length
+              sentenceStartTime = seg.start + (sentIdx * avgSentenceDuration)
+              sentenceEndTime = sentIdx === sentences.length - 1 
+                ? seg.end 
+                : sentenceStartTime + avgSentenceDuration
+            }
             
             splitSegments.push({
-              id: seg.id * 1000 + splitSegments.length, // Unique ID
-              seek: seg.seek,
+              id: seg.id * 10000 + sentIdx,
+              seek: Math.floor(sentenceStartTime * 1000),
+              start: sentenceStartTime,
+              end: sentenceEndTime,
+              text: sentenceText,
+              words: sentenceWords,
+              originalSegmentId: seg.id
+            })
+          })
+        } else {
+          // No word-level timestamps - use proportional distribution
+          const segmentDuration = seg.end - seg.start
+          const avgSentenceDuration = segmentDuration / sentences.length
+          
+          let currentStart = seg.start
+          sentences.forEach((sentence, idx) => {
+            const sentenceText = sentence.trim()
+            if (!sentenceText) return
+            
+            const sentenceEnd = idx === sentences.length - 1 
+              ? seg.end 
+              : Math.min(currentStart + avgSentenceDuration, seg.end)
+            
+            splitSegments.push({
+              id: seg.id * 10000 + idx,
+              seek: Math.floor(currentStart * 1000),
               start: currentStart,
-              end: segmentEnd,
-              text: segmentText,
+              end: sentenceEnd,
+              text: sentenceText,
               words: [],
-              originalSegmentId: seg.id // Keep reference to original segment
+              originalSegmentId: seg.id
             })
             
-            currentStart = segmentEnd
-            currentSentences = []
-          }
-        })
+            currentStart = sentenceEnd
+          })
+        }
       }
     })
     
@@ -695,7 +741,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   }
 
   const handleEditTranslation = async (translation: any) => {
-    setEditingTranslation(translation.id)
+    // Note: We use editingTextTranslation (not editingTranslation) for the new inline view
     setEditedTranslationText(translation.translated_text)
     
     // Initialize segments array from translation
@@ -777,30 +823,51 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       }))
     }
     
-    // Split both English and translation segments by sentences for easier editing
-    const splitEnglishSegments = splitSegmentsBySentences(originalSegments)
-    const splitMatchedSegments = splitSegmentsBySentences(matchedSegments)
+    // CRITICAL: Split both English and translation segments by sentences using the SAME logic
+    // This ensures perfect 1:1 alignment with identical timestamps
     
-    // Re-align split translation segments with split English segments
-    // Match by position/index since we split both the same way
-    const alignedSegments = splitEnglishSegments.map((engSeg, idx) => {
-      const transSeg = splitMatchedSegments[idx] || { text: '', start: engSeg.start, end: engSeg.end }
-      return {
-        ...engSeg,
-        translationText: transSeg.text || '',
-        originalSegmentId: engSeg.originalSegmentId || engSeg.id
-      }
+    // First, split English segments into sentences with accurate word-level timestamps
+    const splitEnglishSegments = splitSegmentsBySentences(originalSegments)
+    
+    // Now, for each split English segment, we need to find the corresponding translation text
+    // We'll split the translation segments the same way
+    const alignedSegments: any[] = []
+    
+    // Process each original segment
+    originalSegments.forEach((originalSeg, segIdx) => {
+      // Get corresponding translation segment - it should have the SAME ID and timestamps
+      const translationSeg = matchedSegments.find((m: any) => m.id === originalSeg.id) || 
+                            matchedSegments[segIdx] || 
+                            { text: '', id: originalSeg.id, start: originalSeg.start, end: originalSeg.end }
+      
+      // Get all split English segments for this original segment
+      const splitEnglishForThisSegment = splitSegmentsBySentences([originalSeg])
+      
+      // Split the translation text into sentences to match
+      const translationText = translationSeg.text || ''
+      const translationSentences = translationText
+        .split(/(?<=[.!?])\s+(?=[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ])/i)
+        .filter(s => s.trim())
+      
+      // For each split English sentence, create a matching translation segment
+      splitEnglishForThisSegment.forEach((splitEngSeg: any, sentIdx: number) => {
+        // CRITICAL: Use the EXACT same timestamps from the split English segment
+        // This ensures perfect alignment
+        const transSentence = translationSentences[sentIdx]?.trim() || ''
+        
+        alignedSegments.push({
+          id: splitEngSeg.id, // Use the same ID structure as English
+          seek: splitEngSeg.seek, // EXACT same seek
+          start: splitEngSeg.start, // EXACT same start timestamp
+          end: splitEngSeg.end, // EXACT same end timestamp
+          text: transSentence,
+          words: [],
+          originalSegmentId: originalSeg.id
+        })
+      })
     })
     
-    setEditedTranslationSegments(alignedSegments.map(seg => ({
-      id: seg.id,
-      seek: seg.seek,
-      start: seg.start,
-      end: seg.end,
-      text: seg.translationText,
-      words: [],
-      originalSegmentId: seg.originalSegmentId
-    })))
+    setEditedTranslationSegments(alignedSegments)
   }
 
   const handleSaveTranslationVersion = async (translationId: string) => {
@@ -930,7 +997,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           await loadSpeechFilesForTranslations(updatedTranslations)
         }
         
-        setEditingTranslation(null)
+        setEditingTextTranslation(null) // Use editingTextTranslation for inline view
         setEditedTranslationText('')
         setEditedTranslationSegments([])
       } else {
@@ -945,7 +1012,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   }
 
   const handleCancelEditTranslation = () => {
-    setEditingTranslation(null)
+    setEditingTextTranslation(null) // Use editingTextTranslation for inline view
     setEditedTranslationText('')
     setEditedTranslationSegments([])
   }
@@ -1893,32 +1960,78 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                         No translations yet. Use the "Batch Translate" button above to generate translations first.
                       </div>
                     ) : (
-                      <select
-                        value={selectedLanguageForEdit || ''}
-                        onChange={(e) => setSelectedLanguageForEdit(e.target.value || null)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
-                      >
-                        <option value="">-- Select a language --</option>
-                        {[
-                          { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
-                          { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
-                          { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
-                          { code: 'fr', name: 'French', flag: '🇫🇷' },
-                          { code: 'ge', name: 'German', flag: '🇩🇪' },
-                          { code: 'it', name: 'Italian', flag: '🇮🇹' },
-                          { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
-                          { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
-                          { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
-                        ].map(lang => {
-                          const translation = translations.find((t: any) => t.language_code === lang.code)
-                          if (!translation) return null
-                          return (
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={selectedLanguageForEdit || ''}
+                          onChange={(e) => setSelectedLanguageForEdit(e.target.value || null)}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+                        >
+                          <option value="">-- Select a language --</option>
+                          {[
+                            { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
+                            { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
+                            { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+                            { code: 'fr', name: 'French', flag: '🇫🇷' },
+                            { code: 'ge', name: 'German', flag: '🇩🇪' },
+                            { code: 'it', name: 'Italian', flag: '🇮🇹' },
+                            { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
+                            { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+                            { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
+                          ].map(lang => {
+                            const translation = translations.find((t: any) => t.language_code === lang.code)
+                            if (!translation) return null
+                            return (
                             <option key={lang.code} value={lang.code}>
-                              {lang.flag} {lang.name}
+                              {lang.flag} {lang.name} {translation.is_archived ? '(Archived)' : ''}
                             </option>
+                            )
+                          })}
+                        </select>
+                        {selectedLanguageForEdit && (() => {
+                          const translation = translations.find((t: any) => t.language_code === selectedLanguageForEdit)
+                          if (!translation) return null
+                          
+                          const sourceVersion = translation.source_version
+                          const sourceVersionType = sourceVersion?.version_type || (translation.source_transcription_version_id === null ? 'T-1' : 'Unknown')
+                          const isArchived = translation.is_archived
+                          
+                          return (
+                            <div className="relative group">
+                              <button
+                                type="button"
+                                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                title="Translation source info"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </button>
+                              <div className="absolute right-0 top-full mt-2 w-64 p-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                <div className="text-sm space-y-2">
+                                  <div>
+                                    <span className="font-semibold text-gray-700 dark:text-gray-300">Source:</span>{' '}
+                                    <span className="text-gray-600 dark:text-gray-400">{sourceVersionType}</span>
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold text-gray-700 dark:text-gray-300">Status:</span>{' '}
+                                    {isArchived ? (
+                                      <span className="text-orange-600 dark:text-orange-400">Archived (Outdated)</span>
+                                    ) : (
+                                      <span className="text-green-600 dark:text-green-400">Current</span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold text-gray-700 dark:text-gray-300">Created:</span>{' '}
+                                    <span className="text-gray-600 dark:text-gray-400">
+                                      {new Date(translation.created_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
                           )
-                        })}
-                      </select>
+                        })()}
+                      </div>
                     )}
                   </div>
 
@@ -2026,39 +2139,85 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                               </div>
                               <div className="max-h-[80vh] overflow-y-auto space-y-2">
                                 {(() => {
-                                  // Split English segments to match with translation segments
+                                  // CRITICAL: Use the SAME split English segments as the left side
+                                  // This ensures perfect timestamp alignment
                                   const splitEnglish = splitSegmentsBySentences(englishSegments)
+                                  
+                                  // Get translation segments - should already be aligned from handleEditTranslation
+                                  // If empty, initialize using the same split structure
+                                  let translationSegs = editedTranslationSegments
+                                  
+                                  if (translationSegs.length === 0 && translation.translated_text) {
+                                    // Initialize by matching to English segment structure
+                                    // Split translation into sentences to match English sentences
+                                    const translationText = translation.translated_text
+                                    const translationSentences = translationText
+                                      .split(/(?<=[.!?])\s+(?=[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ])/i)
+                                      .filter(s => s.trim())
+                                    
+                                    // Map each English sentence to a translation sentence
+                                    translationSegs = splitEnglish.map((engSeg: any, idx: number) => ({
+                                      id: engSeg.id, // CRITICAL: Same ID as English
+                                      seek: engSeg.seek, // CRITICAL: Same seek as English
+                                      start: engSeg.start, // CRITICAL: Same start timestamp as English
+                                      end: engSeg.end, // CRITICAL: Same end timestamp as English
+                                      text: translationSentences[idx]?.trim() || '',
+                                      words: [],
+                                      originalSegmentId: engSeg.originalSegmentId || engSeg.id
+                                    }))
+                                    
+                                    // Set them so they persist
+                                    if (translationSegs.length > 0) {
+                                      setEditedTranslationSegments(translationSegs)
+                                    }
+                                  }
+                                  
+                                  // CRITICAL: Match by index - both arrays MUST be the same length
+                                  // and have identical timestamps
                                   return splitEnglish.map((seg: any, idx: number) => {
-                                    const translatedSegment = editedTranslationSegments[idx] || { text: '', start: seg.start, end: seg.end }
+                                    // Find translation segment with matching ID or use index
+                                    const translatedSegment = translationSegs.find((t: any) => t.id === seg.id) || 
+                                                             translationSegs[idx] || 
+                                                             { text: '', start: seg.start, end: seg.end, id: seg.id, seek: seg.seek }
+                                    
+                                    // CRITICAL: Use English segment timestamps to ensure alignment
                                     const segmentText = translatedSegment.text || ''
                                     
                                     return (
-                                      <div key={idx} className="p-3 bg-blue-50 rounded border border-blue-200 dark:bg-blue-900 dark:border-blue-700">
+                                      <div key={seg.id || idx} className="p-3 bg-blue-50 rounded border border-blue-200 dark:bg-blue-900 dark:border-blue-700">
                                         <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
                                           {formatTime(seg.start)} - {formatTime(seg.end)}
                                         </div>
                                         <textarea
                                           value={segmentText}
                                           onChange={(e) => {
-                                            const newSegments = [...editedTranslationSegments]
-                                            if (!newSegments[idx]) {
-                                              newSegments[idx] = {
+                                            const newSegments = [...translationSegs]
+                                            // Ensure array is long enough
+                                            while (newSegments.length <= idx) {
+                                              newSegments.push({ 
+                                                text: '', 
+                                                start: seg.start, 
+                                                end: seg.end,
                                                 id: seg.id,
                                                 seek: seg.seek,
-                                                start: seg.start,
-                                                end: seg.end,
-                                                text: e.target.value,
-                                                words: [],
-                                                originalSegmentId: seg.originalSegmentId || seg.id
-                                              }
-                                            } else {
-                                              newSegments[idx] = { ...newSegments[idx], text: e.target.value }
+                                                originalSegmentId: seg.originalSegmentId
+                                              })
+                                            }
+                                            // Update or create segment with EXACT same timestamps as English
+                                            newSegments[idx] = {
+                                              id: seg.id, // CRITICAL: Same ID
+                                              seek: seg.seek, // CRITICAL: Same seek
+                                              start: seg.start, // CRITICAL: Same start timestamp
+                                              end: seg.end, // CRITICAL: Same end timestamp
+                                              text: e.target.value,
+                                              words: [],
+                                              originalSegmentId: seg.originalSegmentId || seg.id
                                             }
                                             setEditedTranslationSegments(newSegments)
                                             setEditedTranslationText(newSegments.map(s => s.text).join(' '))
                                           }}
                                           className="w-full p-2 border border-gray-300 rounded text-sm resize-none dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
-                                          rows={Math.max(2, Math.min(5, segmentText.split(' ').length / 10))}
+                                          rows={Math.max(2, Math.min(4, Math.ceil(segmentText.length / 50)))}
                                           placeholder="Translation..."
                                         />
                                       </div>
@@ -2077,10 +2236,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                                   {savingTranslation ? 'Saving...' : 'Save Version'}
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    setEditingTextTranslation(null)
-                                    handleCancelEditTranslation()
-                                  }}
+                                  onClick={handleCancelEditTranslation}
                                   disabled={savingTranslation}
                                   className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm disabled:opacity-50"
                                 >
@@ -2206,140 +2362,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
             </div>
           )}
 
-          {/* Old translations tab removed - functionality moved to Text Translations and Speech Translations tabs */}
-
-          {/* Translation Edit Modal - Split View */}
-          {editingTranslation && (() => {
-            const translation = translations.find((t: any) => t.id === editingTranslation)
-            if (!translation) return null
-            
-            // Get original English text from final version
-            let originalEnglishText = ''
-            let originalSegments: any[] = []
-            
-            if (transcriptions.length > 0) {
-              const transcription = transcriptions[0]
-              if (transcription.final_version_id !== undefined) {
-                if (transcription.final_version_id === null) {
-                  // T-1 is final
-                  originalEnglishText = transcription.raw_text
-                  originalSegments = transcription.json_with_timestamps?.segments || []
-                } else {
-                  // A version is final
-                  const finalVersion = transcription.versions?.find((v: any) => v.id === transcription.final_version_id)
-                  if (finalVersion) {
-                    originalEnglishText = finalVersion.edited_text
-                    originalSegments = finalVersion.json_with_timestamps?.segments || []
-                  }
-                }
-              }
-            }
-            
-            return (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => {
-                if (e.target === e.currentTarget) handleCancelEditTranslation()
-              }}>
-                <div className="bg-white p-6 rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col dark:bg-gray-800">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold">Edit Translation - Side by Side View</h3>
-                    <button
-                      onClick={handleCancelEditTranslation}
-                      className="text-gray-500 hover:text-gray-700"
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                  
-                  {/* Split View */}
-                  <div className="flex gap-4 flex-1 overflow-hidden">
-                    {/* Left: Original English */}
-                    <div className="flex-1 border-r border-gray-300 pr-4 overflow-y-auto">
-                      <h4 className="text-sm font-semibold text-gray-600 mb-2">English Original (Reference)</h4>
-                      {originalSegments.length > 0 ? (
-                        <div className="space-y-3">
-                          {originalSegments.map((seg: any, idx: number) => (
-                            <div key={idx} className="p-3 bg-gray-50 rounded border border-gray-200">
-                              <div className="text-xs text-gray-500 mb-1">
-                                {formatTime(seg.start)} - {formatTime(seg.end)}
-                              </div>
-                              <div className="text-sm leading-relaxed">{seg.text}</div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="p-4 bg-gray-50 rounded text-sm text-gray-600">
-                          {originalEnglishText || 'No segments available'}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Right: Translated Version (Editable) */}
-                    <div className="flex-1 overflow-y-auto">
-                      <h4 className="text-sm font-semibold text-gray-600 mb-2">Translation (Editable)</h4>
-                      {originalSegments.length > 0 && (
-                        <div className="space-y-3">
-                          {originalSegments.map((seg: any, idx: number) => {
-                            const translatedSegment = editedTranslationSegments[idx] || { text: '', start: seg.start, end: seg.end }
-                            const segmentText = translatedSegment.text || ''
-                            
-                            return (
-                              <div key={idx} className="p-3 bg-blue-50 rounded border border-blue-200">
-                                <div className="text-xs text-gray-500 mb-1">
-                                  {formatTime(seg.start)} - {formatTime(seg.end)}
-                                </div>
-                                <textarea
-                                  value={segmentText}
-                                  onChange={(e) => {
-                                    const newSegments = [...editedTranslationSegments]
-                                    if (!newSegments[idx]) {
-                                      newSegments[idx] = {
-                                        id: seg.id,
-                                        seek: seg.seek,
-                                        start: seg.start,
-                                        end: seg.end,
-                                        text: e.target.value,
-                                        words: []
-                                      }
-                                    } else {
-                                      newSegments[idx] = { ...newSegments[idx], text: e.target.value }
-                                    }
-                                    setEditedTranslationSegments(newSegments)
-                                    setEditedTranslationText(newSegments.map(s => s.text).join(' '))
-                                  }}
-                                  className="w-full p-2 border border-gray-300 rounded text-sm resize-none"
-                                  rows={3}
-                                  placeholder="Translation..."
-                                />
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex gap-3 justify-end mt-4 pt-4 border-t border-gray-200">
-                    <button
-                      onClick={handleCancelEditTranslation}
-                      className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={() => handleSaveTranslationVersion(editingTranslation)}
-                      disabled={savingTranslation}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {savingTranslation ? 'Saving...' : 'Save Version'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
+          {/* Old translations tab and modal removed - functionality moved to Text Translations and Speech Translations tabs */}
         </div>
       )}
 

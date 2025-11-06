@@ -763,6 +763,11 @@ Apply dictionary corrections to text.
 
 Create translation in target language using Claude API.
 
+**CRITICAL (v2.1.0)**: Translation segments maintain 1:1 alignment with English segments:
+- Each translation segment has identical `id`, `start`, `end`, and `seek` values as the corresponding English segment
+- Only the `text` field is translated; all other properties are preserved from English
+- Ensures perfect side-by-side alignment in the editing interface
+
 **Request:**
 ```json
 {

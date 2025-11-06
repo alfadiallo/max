@@ -45,6 +45,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }
     }
 
+    // Get current final_version_id before updating
+    const { data: currentTranscription } = await supabase
+      .from('max_transcriptions')
+      .select('final_version_id')
+      .eq('id', transcriptionId)
+      .single()
+
+    const currentFinalVersionId = currentTranscription?.final_version_id
+
     // Update the transcription to mark this version as final
     const { data: transcription, error: updateError } = await supabase
       .from('max_transcriptions')
@@ -63,6 +72,38 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         { success: false, error: 'Update failed - no rows updated. Check RLS policies.' },
         { status: 403 }
       )
+    }
+
+    // Archive old translations if final_version_id changed
+    if (currentFinalVersionId !== version_id) {
+      const oldVersionId = currentFinalVersionId
+
+      // Archive translations that were based on the old version
+      if (oldVersionId === null) {
+        // T-1 was final, now changing to H-version - archive T-1 based translations
+        const { error: archiveT1Error } = await supabase
+          .from('max_translations')
+          .update({ is_archived: true })
+          .eq('transcription_id', transcriptionId)
+          .is('source_transcription_version_id', null)
+          .eq('is_archived', false)
+
+        if (archiveT1Error) {
+          console.error('Error archiving T-1 based translations:', archiveT1Error)
+        }
+      } else {
+        // H-version was final - archive translations based on that H-version
+        const { error: archiveHVersionError } = await supabase
+          .from('max_translations')
+          .update({ is_archived: true })
+          .eq('transcription_id', transcriptionId)
+          .eq('source_transcription_version_id', oldVersionId)
+          .eq('is_archived', false)
+
+        if (archiveHVersionError) {
+          console.error('Error archiving H-version based translations:', archiveHVersionError)
+        }
+      }
     }
 
     return NextResponse.json({ 
