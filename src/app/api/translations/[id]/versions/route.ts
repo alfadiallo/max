@@ -28,7 +28,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ success: false, error: 'Translation not found' }, { status: 404 })
     }
 
-    // Get latest version number
+    // Get language code from translation
+    const languageCode = translation.language_code
+    
+    // Map language code to 2-letter abbreviation for version type
+    const langCodeMap: Record<string, string> = {
+      'sp': 'sp',
+      'pr': 'pr',
+      'ar': 'ar',
+      'fr': 'fr',
+      'ge': 'ge',
+      'it': 'it',
+      'ma': 'ma',
+      'ja': 'ja',
+      'hi': 'hi'
+    }
+    const langAbbr = langCodeMap[languageCode] || languageCode.substring(0, 2).toLowerCase()
+
+    // Get latest version number for this translation
     const { data: latestVersion, error: latestError } = await supabase
       .from('max_translation_versions')
       .select('version_number')
@@ -38,7 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .single()
 
     const nextVersionNumber = latestVersion ? latestVersion.version_number + 1 : 1
-    const versionType = `H-${nextVersionNumber}`
+    const versionType = `H-${langAbbr}-${nextVersionNumber}`
 
     const { data: newVersion, error: insertError } = await supabase
       .from('max_translation_versions')

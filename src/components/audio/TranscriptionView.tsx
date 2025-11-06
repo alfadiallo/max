@@ -89,7 +89,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [findReplaceResults, setFindReplaceResults] = useState<any[]>([])
   const [selectedFindReplace, setSelectedFindReplace] = useState<Set<number>>(new Set())
   const [user, setUser] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState<'original' | 'edits' | 'final' | 'analysis' | 'translations'>('original')
+  const [activeTab, setActiveTab] = useState<'original' | 'edits' | 'text-translations' | 'speech-translations' | 'final' | 'analysis' | 'translations'>('original')
   const supabase = createClient()
   
   // Check if user is Editor (restricted access)
@@ -111,6 +111,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [sendingToInsight, setSendingToInsight] = useState(false) // Whether sending to Insight
   const [sentToInsight, setSentToInsight] = useState<string | null>(null) // transcription_id that was sent
   const [sendingToRAG, setSendingToRAG] = useState<string | null>(null) // transcription_id being sent to RAG
+  const [selectedLanguageForEdit, setSelectedLanguageForEdit] = useState<string | null>(null) // language_code for text-translations tab
+  const [editingTextTranslation, setEditingTextTranslation] = useState<string | null>(null) // translation_id being edited in text-translations tab
 
   const loadTranscriptions = async () => {
     setLoading(true)
@@ -158,7 +160,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
 
   // Reset activeTab if Editor tries to access restricted tabs
   useEffect(() => {
-    if (isEditor && (activeTab === 'final' || activeTab === 'analysis' || activeTab === 'translations')) {
+    if (isEditor && (activeTab === 'final' || activeTab === 'analysis' || activeTab === 'translations' || activeTab === 'text-translations' || activeTab === 'speech-translations')) {
       setActiveTab('original')
     }
   }, [isEditor, activeTab])
@@ -808,6 +810,65 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     setEditedTranslationSegments([])
   }
 
+  const handlePromoteToSpeech = async (translationId: string) => {
+    try {
+      const response = await fetch(`/api/translations/${translationId}/promote-to-speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        // Reload translations to get updated state
+        await loadTranslations()
+      } else {
+        alert(`Failed to promote translation to speech: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error promoting translation to speech:', error)
+      alert('Failed to promote translation to speech')
+    }
+  }
+
+  const handleDownloadTranslationText = (translation: any) => {
+    try {
+      // Get the final version or current translation text with timestamps
+      let textToExport = translation.translated_text
+      let segments = translation.json_with_timestamps?.segments || []
+      
+      // If there's a final version, use that
+      if (translation.final_version_id) {
+        // We'd need to fetch the version, but for now use current translation
+        // In a full implementation, we'd fetch the version here
+      }
+      
+      // Create JSON export
+      const exportData = {
+        language_code: translation.language_code,
+        translation_id: translation.id,
+        segments: segments.map((seg: any) => ({
+          start: seg.start,
+          end: seg.end,
+          text: seg.text
+        })),
+        full_text: textToExport
+      }
+      
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `translation_${translation.language_code}_${Date.now()}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error downloading translation text:', error)
+      alert('Failed to download translation text')
+    }
+  }
+
   const handleDownloadSpeech = async (audioUrl: string, languageCode: string) => {
     try {
       // Fetch the audio file
@@ -829,9 +890,9 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     }
   }
 
-  // Load translations when tab switches to translations
+  // Load translations when tab switches to translations-related tabs
   useEffect(() => {
-    if (activeTab === 'translations' && transcriptions.length > 0) {
+    if ((activeTab === 'translations' || activeTab === 'text-translations' || activeTab === 'speech-translations') && transcriptions.length > 0) {
       loadTranslations()
     }
   }, [activeTab, transcriptions])
@@ -887,6 +948,30 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
             </button>
             {!isEditor && (
               <button
+                onClick={() => setActiveTab('text-translations')}
+                className={`px-4 py-2 text-sm font-medium ${
+                  activeTab === 'text-translations'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Text Translations
+              </button>
+            )}
+            {!isEditor && (
+              <button
+                onClick={() => setActiveTab('speech-translations')}
+                className={`px-4 py-2 text-sm font-medium ${
+                  activeTab === 'speech-translations'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Speech Translations
+              </button>
+            )}
+            {!isEditor && (
+              <button
                 onClick={() => setActiveTab('final')}
                 className={`px-4 py-2 text-sm font-medium ${
                   activeTab === 'final'
@@ -912,18 +997,6 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                 }`}
               >
                 Analysis {analysis && '✓'}
-              </button>
-            )}
-            {!isEditor && (
-              <button
-                onClick={() => setActiveTab('translations')}
-                className={`px-4 py-2 text-sm font-medium ${
-                  activeTab === 'translations'
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
-              >
-                Translations
               </button>
             )}
           </div>
@@ -1087,7 +1160,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                                           onClick={() => handlePromoteToFinal(version.id)}
                                           className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
                                         >
-                                          Promote to Final
+                                          Ready to Translate
                                         </button>
                                       )}
                                     </div>
@@ -1615,42 +1688,40 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
             </div>
           )}
 
-          {activeTab === 'translations' && !isEditor && (
+          {activeTab === 'text-translations' && !isEditor && (
             <div className="space-y-4">
               {!finalVersion ? (
-                <p className="text-sm text-gray-600 italic text-center py-8">
-                  No final version selected. Go to the <span className="font-medium">Final</span> tab and promote a version to Final first.
+                <p className="text-sm text-gray-600 italic text-center py-8 dark:text-gray-300">
+                  No version ready for translation. Go to the <span className="font-medium">Edits</span> tab and click "Ready to Translate" on a version first.
                 </p>
               ) : (
                 <>
                   <div className="flex items-center justify-between mb-4">
-                    <p className="text-sm text-gray-600">Translate your final transcription into multiple languages:</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Translate and edit your transcription into multiple languages:</p>
                     <div className="flex gap-2">
                       {translationsLoaded && transcriptions.length > 0 && (() => {
                         const allLanguages = [
-                          { code: 'sp', name: 'Spanish' },
-                          { code: 'pr', name: 'Portuguese' },
-                          { code: 'ar', name: 'Arabic' },
-                          { code: 'fr', name: 'French' },
-                          { code: 'ge', name: 'German' },
-                          { code: 'it', name: 'Italian' },
-                          { code: 'ma', name: 'Mandarin' },
-                          { code: 'ja', name: 'Japanese' },
-                          { code: 'hi', name: 'Hindi' }
+                          { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
+                          { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
+                          { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+                          { code: 'fr', name: 'French', flag: '🇫🇷' },
+                          { code: 'ge', name: 'German', flag: '🇩🇪' },
+                          { code: 'it', name: 'Italian', flag: '🇮🇹' },
+                          { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
+                          { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+                          { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
                         ]
                         const existingCodes = translations.map((t: any) => t.language_code)
                         const toTranslate = allLanguages.filter(lang => !existingCodes.includes(lang.code))
                         
-                        if (toTranslate.length === 0) return null // All languages translated
+                        if (toTranslate.length === 0) return null
                         
                         return <button
                           onClick={async () => {
-                            
                             console.log(`Batch translating ${toTranslate.length} languages...`)
                             for (const lang of toTranslate) {
                               console.log(`Translating to ${lang.name}...`)
                               await generateTranslation(lang.code)
-                              // Small delay between translations to avoid rate limits
                               await new Promise(resolve => setTimeout(resolve, 500))
                             }
                             console.log('Batch translation complete!')
@@ -1671,154 +1742,304 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                           )}
                         </button>
                       })()}
-                      {translations.length > 0 && speechLoaded && (() => {
-                        // Count translations without speech
-                        const translationsWithoutSpeech = translations.filter((t: any) => {
-                          const hasSpeech = generatedSpeech.some((s: any) => s.translation_id === t.id && s.status === 'completed')
-                          return !hasSpeech
-                        })
-                        
-                        if (translationsWithoutSpeech.length > 0) {
-                          return (
-                            <button
-                              onClick={async () => {
-                                for (const translation of translationsWithoutSpeech) {
-                                  const langCode = translation.language_code
-                                  await generateSpeech(translation.id, langCode)
-                                  // Small delay to avoid rate limits
-                                  await new Promise(resolve => setTimeout(resolve, 1000))
-                                }
-                              }}
-                              disabled={generatingSpeech !== null}
-                              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm disabled:opacity-50 flex items-center gap-2"
+                    </div>
+                  </div>
+
+                  {/* Language Selector */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Select Language to Edit:</label>
+                    <select
+                      value={selectedLanguageForEdit || ''}
+                      onChange={(e) => setSelectedLanguageForEdit(e.target.value || null)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+                    >
+                      <option value="">-- Select a language --</option>
+                      {[
+                        { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
+                        { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
+                        { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+                        { code: 'fr', name: 'French', flag: '🇫🇷' },
+                        { code: 'ge', name: 'German', flag: '🇩🇪' },
+                        { code: 'it', name: 'Italian', flag: '🇮🇹' },
+                        { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
+                        { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+                        { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
+                      ].map(lang => {
+                        const translation = translations.find((t: any) => t.language_code === lang.code)
+                        if (!translation) return null
+                        return (
+                          <option key={lang.code} value={lang.code}>
+                            {lang.flag} {lang.name}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+
+                  {/* Side-by-side editing interface */}
+                  {selectedLanguageForEdit && (() => {
+                    const translation = translations.find((t: any) => t.language_code === selectedLanguageForEdit)
+                    if (!translation) return null
+
+                    const isEditing = editingTextTranslation === translation.id
+                    const langInfo = [
+                      { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
+                      { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
+                      { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+                      { code: 'fr', name: 'French', flag: '🇫🇷' },
+                      { code: 'ge', name: 'German', flag: '🇩🇪' },
+                      { code: 'it', name: 'Italian', flag: '🇮🇹' },
+                      { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
+                      { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+                      { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
+                    ].find(l => l.code === selectedLanguageForEdit)
+
+                    // Get English original segments
+                    let englishSegments: any[] = []
+                    if (transcriptions.length > 0) {
+                      const transcription = transcriptions[0]
+                      if (transcription.final_version_id !== undefined) {
+                        if (transcription.final_version_id === null) {
+                          englishSegments = transcription.json_with_timestamps?.segments || []
+                        } else {
+                          const finalVersion = transcription.versions?.find((v: any) => v.id === transcription.final_version_id)
+                          if (finalVersion) {
+                            englishSegments = finalVersion.json_with_timestamps?.segments || []
+                          }
+                        }
+                      }
+                    }
+
+                    // Get translation segments
+                    const translationSegments = translation.json_with_timestamps?.segments || []
+
+                    return (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-semibold dark:text-gray-100">
+                            {langInfo?.flag} {langInfo?.name}
+                          </h3>
+                          {!isEditing && (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingTextTranslation(translation.id)
+                                  handleEditTranslation(translation)
+                                }}
+                                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleFindReplace({
+                                  segments: translationSegments,
+                                  text: translation.translated_text,
+                                  id: translation.id
+                                })}
+                                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm"
+                              >
+                                🔍 Find & Replace
+                              </button>
+                              {translation.final_version_id && (
+                                <button
+                                  onClick={() => handlePromoteToSpeech(translation.id)}
+                                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
+                                >
+                                  Promote to Speech Translation
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {isEditing ? (
+                          <div className="grid grid-cols-2 gap-4">
+                            {/* Left: English Original (Read-only) */}
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-700 mb-2 dark:text-gray-200">English Original (Reference)</h4>
+                              <div className="max-h-[80vh] overflow-y-auto space-y-2">
+                                {englishSegments.map((seg: any, idx: number) => (
+                                  <div key={idx} className="p-3 bg-gray-50 rounded border border-gray-200 dark:bg-gray-900 dark:border-gray-700">
+                                    <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
+                                      {formatTime(seg.start)} - {formatTime(seg.end)}
+                                    </div>
+                                    <div className="text-sm leading-relaxed dark:text-gray-100">{seg.text}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            {/* Right: Translated Version (Editable) */}
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Translation (Editable)</h4>
+                              </div>
+                              <div className="max-h-[80vh] overflow-y-auto space-y-2">
+                                {englishSegments.map((seg: any, idx: number) => {
+                                  const translatedSegment = editedTranslationSegments[idx] || { text: '', start: seg.start, end: seg.end }
+                                  const segmentText = translatedSegment.text || ''
+                                  
+                                  return (
+                                    <div key={idx} className="p-3 bg-blue-50 rounded border border-blue-200 dark:bg-blue-900 dark:border-blue-700">
+                                      <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
+                                        {formatTime(seg.start)} - {formatTime(seg.end)}
+                                      </div>
+                                      <textarea
+                                        value={segmentText}
+                                        onChange={(e) => {
+                                          const newSegments = [...editedTranslationSegments]
+                                          if (!newSegments[idx]) {
+                                            newSegments[idx] = {
+                                              id: seg.id,
+                                              seek: seg.seek,
+                                              start: seg.start,
+                                              end: seg.end,
+                                              text: e.target.value,
+                                              words: []
+                                            }
+                                          } else {
+                                            newSegments[idx] = { ...newSegments[idx], text: e.target.value }
+                                          }
+                                          setEditedTranslationSegments(newSegments)
+                                          setEditedTranslationText(newSegments.map(s => s.text).join(' '))
+                                        }}
+                                        className="w-full p-2 border border-gray-300 rounded text-sm resize-none dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+                                        rows={3}
+                                        placeholder="Translation..."
+                                      />
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                              
+                              {/* Action buttons */}
+                              <div className="flex gap-2 mt-4">
+                                <button
+                                  onClick={() => handleSaveTranslationVersion(translation.id)}
+                                  disabled={savingTranslation}
+                                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
+                                >
+                                  {savingTranslation ? 'Saving...' : 'Save Version'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingTextTranslation(null)
+                                    handleCancelEditTranslation()
+                                  }}
+                                  disabled={savingTranslation}
+                                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-white border border-gray-300 rounded-lg p-4 dark:bg-gray-800 dark:border-gray-600">
+                            <p className="text-sm text-gray-600 dark:text-gray-300">
+                              {translation.translated_text || 'No translation text available'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'speech-translations' && !isEditor && (
+            <div className="space-y-4">
+              {translations.length === 0 ? (
+                <p className="text-sm text-gray-600 italic text-center py-8 dark:text-gray-300">
+                  No translations available. Go to <span className="font-medium">Text Translations</span> to create translations first.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                    Generated speech for translations that have been promoted to speech translation:
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
+                      { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
+                      { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+                      { code: 'fr', name: 'French', flag: '🇫🇷' },
+                      { code: 'ge', name: 'German', flag: '🇩🇪' },
+                      { code: 'it', name: 'Italian', flag: '🇮🇹' },
+                      { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
+                      { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+                      { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
+                    ].map(lang => {
+                      const translation = translations.find((t: any) => t.language_code === lang.code && t.final_version_id)
+                      if (!translation) return null
+
+                      const speech = generatedSpeech.find((s: any) => 
+                        s.translation_id === translation.id && 
+                        s.language_code === lang.code &&
+                        s.status === 'completed'
+                      )
+                      const isGenerating = generatingSpeech === translation.id
+
+                      return (
+                        <div key={lang.code} className="border border-gray-300 rounded-lg p-4 bg-white dark:bg-gray-800 dark:border-gray-600">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl">{lang.flag}</span>
+                              <div>
+                                <div className="font-semibold text-sm dark:text-gray-100">{lang.name}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">{lang.code}</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {speech ? (
+                            <div className="space-y-2">
+                              <div className="border border-green-200 rounded p-2 bg-green-50 dark:bg-green-900 dark:border-green-700">
+                                <div className="text-xs text-gray-600 mb-1 dark:text-gray-400">🎵 Generated Audio</div>
+                                <audio controls className="w-full" src={speech.audio_url}></audio>
+                                <div className="flex gap-2 mt-2">
+                                  <button 
+                                    onClick={() => handleDownloadSpeech(speech.audio_url, lang.code)}
+                                    className="flex-1 px-3 py-2 bg-green-600 text-white text-xs rounded hover:bg-green-700 text-center"
+                                  >
+                                    ↓ Download Audio
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDownloadTranslationText(translation)}
+                                    className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 text-center"
+                                  >
+                                    ↓ Download Text
+                                  </button>
+                                  <button 
+                                    onClick={() => generateSpeech(translation.id, lang.code)}
+                                    disabled={isGenerating}
+                                    className="flex-1 px-3 py-2 bg-orange-600 text-white text-xs rounded hover:bg-orange-700 disabled:opacity-50"
+                                    title="Regenerate speech"
+                                  >
+                                    🔄 Re-gen
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => generateSpeech(translation.id, lang.code)}
+                              disabled={isGenerating}
+                              className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                              {generatingSpeech !== null ? (
+                              {isGenerating ? (
                                 <>
                                   <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                   </svg>
-                                  Generating Speech...
+                                  Generating...
                                 </>
                               ) : (
-                                `🎵 Generate Speech for ${translationsWithoutSpeech.length} Languages`
+                                '🎵 Generate Speech'
                               )}
-                            </button>
-                          )
-                        }
-                        return null
-                      })()}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    {/* Languages array */}
-                    {[
-                      { flag: '🇪🇸', name: 'Spanish', code: 'sp' },
-                      { flag: '🇵🇹', name: 'Portuguese', code: 'pr' },
-                      { flag: '🇸🇦', name: 'Arabic', code: 'ar' },
-                      { flag: '🇫🇷', name: 'French', code: 'fr' },
-                      { flag: '🇩🇪', name: 'German', code: 'ge' },
-                      { flag: '🇮🇹', name: 'Italian', code: 'it' },
-                      { flag: '🇨🇳', name: 'Mandarin', code: 'ma' },
-                      { flag: '🇯🇵', name: 'Japanese', code: 'ja' },
-                      { flag: '🇮🇳', name: 'Hindi', code: 'hi' }
-                    ].map((lang) => {
-                      const translation = translations.find((t: any) => t.language_code === lang.code)
-                      const isGenerating = generatingTranslation === lang.code
-                      const status = translation ? 'Complete' : isGenerating ? 'In Progress' : 'Not Started'
-                      const statusColor = translation ? 'bg-green-100 text-green-800' : isGenerating ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
-
-                      return (
-                        <div key={lang.code} className="border border-gray-300 rounded-lg p-4 bg-white">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-2xl">{lang.flag}</span>
-                              <div>
-                                <div className="font-semibold text-sm">{lang.name}</div>
-                                <div className="text-xs text-gray-500">{lang.code}</div>
-                              </div>
-                            </div>
-                            <span className={`px-2 py-1 rounded text-xs ${statusColor}`}>{status}</span>
-                          </div>
-                          {isGenerating ? (
-                            <div className="w-full px-4 py-2 bg-yellow-600 text-white rounded text-sm flex items-center justify-center gap-2">
-                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Generating...
-                            </div>
-                          ) : translation ? (
-                            <div className="space-y-2">
-                              <div className="flex gap-2">
-                                <button 
-                                  onClick={() => handleEditTranslation(translation)}
-                                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-                                >
-                                  Edit
-                                </button>
-                              </div>
-                              {/* Speech Generation */}
-                              {(() => {
-                                const speech = generatedSpeech.find((s: any) => 
-                                  s.translation_id === translation.id && 
-                                  s.language_code === lang.code
-                                )
-                                const isGenerating = generatingSpeech === translation.id
-                                
-                                return (
-                                  <div className="space-y-2">
-                                    {speech ? (
-                                      <div className="border border-green-200 rounded p-2 bg-green-50">
-                                        <div className="text-xs text-gray-600 mb-1">🎵 Generated Audio</div>
-                                        <audio controls className="w-full" src={speech.audio_url}></audio>
-                                        <div className="flex gap-2 mt-2">
-                                          <button 
-                                            onClick={() => handleDownloadSpeech(speech.audio_url, lang.code)}
-                                            className="flex-1 px-3 py-2 bg-green-600 text-white text-xs rounded hover:bg-green-700 text-center"
-                                          >
-                                            ↓ Download
-                                          </button>
-                                          <button 
-                                            onClick={() => generateSpeech(translation.id, lang.code)}
-                                            disabled={isGenerating}
-                                            className="flex-1 px-3 py-2 bg-orange-600 text-white text-xs rounded hover:bg-orange-700 disabled:opacity-50"
-                                            title="Delete and regenerate speech"
-                                          >
-                                            🔄 Re-gen
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <button 
-                                        onClick={() => generateSpeech(translation.id, lang.code)}
-                                        disabled={isGenerating}
-                                        className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm disabled:opacity-50 flex items-center justify-center gap-2"
-                                      >
-                                        {isGenerating ? (
-                                          <>
-                                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                            Generating...
-                                          </>
-                                        ) : (
-                                          '🎵 Generate Speech'
-                                        )}
-                                      </button>
-                                    )}
-                                  </div>
-                                )
-                              })()}
-                            </div>
-                          ) : (
-                            <button 
-                              onClick={() => generateTranslation(lang.code)}
-                              disabled={isGenerating}
-                              className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm disabled:opacity-50"
-                            >
-                              Generate Translation
                             </button>
                           )}
                         </div>
@@ -1829,6 +2050,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
               )}
             </div>
           )}
+
+          {/* Old translations tab removed - functionality moved to Text Translations and Speech Translations tabs */}
 
           {/* Translation Edit Modal - Split View */}
           {editingTranslation && (() => {
