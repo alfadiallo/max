@@ -111,7 +111,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
     
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20240620',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
       system: `You are an expert translator specializing in medical and technical content. Translate accurately while preserving structure, timestamps, and technical terminology. Return translations in the exact same segmented format as the input.`,
       messages: [
@@ -208,7 +208,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             translated_at: new Date().toISOString(),
             source_language: 'en',
             target_language: language_code,
-            claude_model: 'claude-3-5-sonnet-20240620'
+            claude_model: 'claude-sonnet-4-20250514'
           }
         },
         dictionary_corrections_applied: {},

@@ -632,6 +632,68 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     }
   }
 
+  // Helper function to split text by sentences (1-2 sentences per segment)
+  const splitSegmentsBySentences = (segments: any[]): any[] => {
+    const splitSegments: any[] = []
+    
+    segments.forEach((seg) => {
+      const text = seg.text || ''
+      if (!text.trim()) {
+        splitSegments.push({ ...seg })
+        return
+      }
+      
+      // Split by sentence endings (. ! ?) but be careful with abbreviations
+      // Split on . ! ? followed by space and capital letter, or end of string
+      // This handles most cases including abbreviations followed by proper sentences
+      const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z][a-z])|(?<=[.!?])\s*$/).filter(s => s.trim())
+      
+      if (sentences.length <= 1) {
+        // Already short enough, keep as is
+        splitSegments.push({ ...seg })
+      } else {
+        // Split into 1-2 sentence chunks
+        const segmentDuration = seg.end - seg.start
+        const avgSentenceDuration = segmentDuration / sentences.length
+        
+        let currentStart = seg.start
+        let currentSentences: string[] = []
+        
+        sentences.forEach((sentence, idx) => {
+          currentSentences.push(sentence.trim())
+          
+          // Group into 1-2 sentences per segment
+          const shouldCreateSegment = 
+            currentSentences.length === 2 || // 2 sentences collected
+            idx === sentences.length - 1 || // Last sentence
+            (currentSentences.length === 1 && idx === sentences.length - 1) // Only one sentence left
+          
+          if (shouldCreateSegment) {
+            const segmentText = currentSentences.join(' ')
+            const sentenceCount = currentSentences.length
+            const segmentDuration = avgSentenceDuration * sentenceCount
+            const segmentEnd = Math.min(currentStart + segmentDuration, seg.end)
+            
+            splitSegments.push({
+              id: seg.id * 1000 + splitSegments.length, // Unique ID
+              seek: seg.seek,
+              start: currentStart,
+              end: segmentEnd,
+              text: segmentText,
+              words: [],
+              originalSegmentId: seg.id // Keep reference to original segment
+            })
+            
+            currentStart = segmentEnd
+            currentSentences = []
+          }
+        })
+      }
+    })
+    
+    return splitSegments
+  }
+
   const handleEditTranslation = async (translation: any) => {
     setEditingTranslation(translation.id)
     setEditedTranslationText(translation.translated_text)
@@ -675,7 +737,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           start: originalSeg.start,
           end: originalSeg.end,
           text: matched?.text || '',
-          words: []
+          words: [],
+          originalSegmentId: originalSeg.id
         }
       })
     } else if (translation.translated_text && originalSegments.length > 0) {
@@ -697,7 +760,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           start: originalSeg.start,
           end: originalSeg.end,
           text: translatedWords.join(' ') || '',
-          words: []
+          words: [],
+          originalSegmentId: originalSeg.id
         }
       })
     } else {
@@ -708,11 +772,35 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
         start: originalSeg.start,
         end: originalSeg.end,
         text: '',
-        words: []
+        words: [],
+        originalSegmentId: originalSeg.id
       }))
     }
     
-    setEditedTranslationSegments(matchedSegments)
+    // Split both English and translation segments by sentences for easier editing
+    const splitEnglishSegments = splitSegmentsBySentences(originalSegments)
+    const splitMatchedSegments = splitSegmentsBySentences(matchedSegments)
+    
+    // Re-align split translation segments with split English segments
+    // Match by position/index since we split both the same way
+    const alignedSegments = splitEnglishSegments.map((engSeg, idx) => {
+      const transSeg = splitMatchedSegments[idx] || { text: '', start: engSeg.start, end: engSeg.end }
+      return {
+        ...engSeg,
+        translationText: transSeg.text || '',
+        originalSegmentId: engSeg.originalSegmentId || engSeg.id
+      }
+    })
+    
+    setEditedTranslationSegments(alignedSegments.map(seg => ({
+      id: seg.id,
+      seek: seg.seek,
+      start: seg.start,
+      end: seg.end,
+      text: seg.translationText,
+      words: [],
+      originalSegmentId: seg.originalSegmentId
+    })))
   }
 
   const handleSaveTranslationVersion = async (translationId: string) => {
@@ -721,20 +809,72 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       const originalTranslation = translations.find((t: any) => t.id === translationId)
       if (!originalTranslation) return
 
-      // Use edited segments or fallback to creating from edited text
-      const segmentsToSave = editedTranslationSegments.length > 0 
-        ? editedTranslationSegments
-        : originalTranslation.json_with_timestamps?.segments?.map((seg: any, idx: number) => ({
-            ...seg,
-            text: editedTranslationText.split(' ').slice(idx, idx + 10).join(' ') // Simplified fallback
-          })) || []
+      // Merge split segments back into original segment structure
+      // Group split segments by their originalSegmentId
+      const segmentsByOriginal: Record<number, any[]> = {}
+      editedTranslationSegments.forEach((seg: any) => {
+        const origId = seg.originalSegmentId || seg.id
+        if (!segmentsByOriginal[origId]) {
+          segmentsByOriginal[origId] = []
+        }
+        segmentsByOriginal[origId].push(seg)
+      })
+
+      // Get original English segments to match structure
+      let originalSegments: any[] = []
+      if (transcriptions.length > 0) {
+        const transcription = transcriptions[0]
+        if (transcription.final_version_id !== undefined) {
+          if (transcription.final_version_id === null) {
+            originalSegments = transcription.json_with_timestamps?.segments || []
+          } else {
+            const finalVersion = transcription.versions?.find((v: any) => v.id === transcription.final_version_id)
+            if (finalVersion) {
+              originalSegments = finalVersion.json_with_timestamps?.segments || []
+            }
+          }
+        }
+      }
+
+      // Reconstruct segments matching original structure
+      const segmentsToSave = originalSegments.map((origSeg) => {
+        const splitSegments = segmentsByOriginal[origSeg.id] || []
+        if (splitSegments.length > 0) {
+          // Merge split segments back into one
+          const mergedText = splitSegments.map((s: any) => s.text).join(' ').trim()
+          const firstSplit = splitSegments[0]
+          const lastSplit = splitSegments[splitSegments.length - 1]
+          
+          return {
+            id: origSeg.id,
+            seek: origSeg.seek,
+            start: origSeg.start,
+            end: origSeg.end,
+            text: mergedText,
+            words: []
+          }
+        } else {
+          // Fallback: use original segment structure
+          return {
+            id: origSeg.id,
+            seek: origSeg.seek,
+            start: origSeg.start,
+            end: origSeg.end,
+            text: origSeg.text || '',
+            words: []
+          }
+        }
+      })
+
+      // Build full text from merged segments
+      const fullText = segmentsToSave.map((seg: any) => seg.text).join(' ').trim() || editedTranslationText
 
       // Save the translation version
       const response = await fetch(`/api/translations/${translationId}/versions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          edited_text: editedTranslationText,
+          edited_text: fullText,
           json_with_timestamps: {
             segments: segmentsToSave
           }
@@ -1748,32 +1888,38 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                   {/* Language Selector */}
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Select Language to Edit:</label>
-                    <select
-                      value={selectedLanguageForEdit || ''}
-                      onChange={(e) => setSelectedLanguageForEdit(e.target.value || null)}
-                      className="px-4 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
-                    >
-                      <option value="">-- Select a language --</option>
-                      {[
-                        { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
-                        { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
-                        { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
-                        { code: 'fr', name: 'French', flag: '🇫🇷' },
-                        { code: 'ge', name: 'German', flag: '🇩🇪' },
-                        { code: 'it', name: 'Italian', flag: '🇮🇹' },
-                        { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
-                        { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
-                        { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
-                      ].map(lang => {
-                        const translation = translations.find((t: any) => t.language_code === lang.code)
-                        if (!translation) return null
-                        return (
-                          <option key={lang.code} value={lang.code}>
-                            {lang.flag} {lang.name}
-                          </option>
-                        )
-                      })}
-                    </select>
+                    {translations.length === 0 ? (
+                      <div className="px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-600 text-gray-600 dark:text-gray-400">
+                        No translations yet. Use the "Batch Translate" button above to generate translations first.
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedLanguageForEdit || ''}
+                        onChange={(e) => setSelectedLanguageForEdit(e.target.value || null)}
+                        className="px-4 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+                      >
+                        <option value="">-- Select a language --</option>
+                        {[
+                          { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
+                          { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
+                          { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+                          { code: 'fr', name: 'French', flag: '🇫🇷' },
+                          { code: 'ge', name: 'German', flag: '🇩🇪' },
+                          { code: 'it', name: 'Italian', flag: '🇮🇹' },
+                          { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
+                          { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+                          { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
+                        ].map(lang => {
+                          const translation = translations.find((t: any) => t.language_code === lang.code)
+                          if (!translation) return null
+                          return (
+                            <option key={lang.code} value={lang.code}>
+                              {lang.flag} {lang.name}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    )}
                   </div>
 
                   {/* Side-by-side editing interface */}
@@ -1858,14 +2004,18 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                             <div>
                               <h4 className="text-sm font-semibold text-gray-700 mb-2 dark:text-gray-200">English Original (Reference)</h4>
                               <div className="max-h-[80vh] overflow-y-auto space-y-2">
-                                {englishSegments.map((seg: any, idx: number) => (
-                                  <div key={idx} className="p-3 bg-gray-50 rounded border border-gray-200 dark:bg-gray-900 dark:border-gray-700">
-                                    <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
-                                      {formatTime(seg.start)} - {formatTime(seg.end)}
+                                {(() => {
+                                  // Split English segments by sentences for display
+                                  const splitEnglish = splitSegmentsBySentences(englishSegments)
+                                  return splitEnglish.map((seg: any, idx: number) => (
+                                    <div key={idx} className="p-3 bg-gray-50 rounded border border-gray-200 dark:bg-gray-900 dark:border-gray-700">
+                                      <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
+                                        {formatTime(seg.start)} - {formatTime(seg.end)}
+                                      </div>
+                                      <div className="text-sm leading-relaxed dark:text-gray-100">{seg.text}</div>
                                     </div>
-                                    <div className="text-sm leading-relaxed dark:text-gray-100">{seg.text}</div>
-                                  </div>
-                                ))}
+                                  ))
+                                })()}
                               </div>
                             </div>
                             
@@ -1875,41 +2025,46 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                                 <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Translation (Editable)</h4>
                               </div>
                               <div className="max-h-[80vh] overflow-y-auto space-y-2">
-                                {englishSegments.map((seg: any, idx: number) => {
-                                  const translatedSegment = editedTranslationSegments[idx] || { text: '', start: seg.start, end: seg.end }
-                                  const segmentText = translatedSegment.text || ''
-                                  
-                                  return (
-                                    <div key={idx} className="p-3 bg-blue-50 rounded border border-blue-200 dark:bg-blue-900 dark:border-blue-700">
-                                      <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
-                                        {formatTime(seg.start)} - {formatTime(seg.end)}
-                                      </div>
-                                      <textarea
-                                        value={segmentText}
-                                        onChange={(e) => {
-                                          const newSegments = [...editedTranslationSegments]
-                                          if (!newSegments[idx]) {
-                                            newSegments[idx] = {
-                                              id: seg.id,
-                                              seek: seg.seek,
-                                              start: seg.start,
-                                              end: seg.end,
-                                              text: e.target.value,
-                                              words: []
+                                {(() => {
+                                  // Split English segments to match with translation segments
+                                  const splitEnglish = splitSegmentsBySentences(englishSegments)
+                                  return splitEnglish.map((seg: any, idx: number) => {
+                                    const translatedSegment = editedTranslationSegments[idx] || { text: '', start: seg.start, end: seg.end }
+                                    const segmentText = translatedSegment.text || ''
+                                    
+                                    return (
+                                      <div key={idx} className="p-3 bg-blue-50 rounded border border-blue-200 dark:bg-blue-900 dark:border-blue-700">
+                                        <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
+                                          {formatTime(seg.start)} - {formatTime(seg.end)}
+                                        </div>
+                                        <textarea
+                                          value={segmentText}
+                                          onChange={(e) => {
+                                            const newSegments = [...editedTranslationSegments]
+                                            if (!newSegments[idx]) {
+                                              newSegments[idx] = {
+                                                id: seg.id,
+                                                seek: seg.seek,
+                                                start: seg.start,
+                                                end: seg.end,
+                                                text: e.target.value,
+                                                words: [],
+                                                originalSegmentId: seg.originalSegmentId || seg.id
+                                              }
+                                            } else {
+                                              newSegments[idx] = { ...newSegments[idx], text: e.target.value }
                                             }
-                                          } else {
-                                            newSegments[idx] = { ...newSegments[idx], text: e.target.value }
-                                          }
-                                          setEditedTranslationSegments(newSegments)
-                                          setEditedTranslationText(newSegments.map(s => s.text).join(' '))
-                                        }}
-                                        className="w-full p-2 border border-gray-300 rounded text-sm resize-none dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
-                                        rows={3}
-                                        placeholder="Translation..."
-                                      />
-                                    </div>
-                                  )
-                                })}
+                                            setEditedTranslationSegments(newSegments)
+                                            setEditedTranslationText(newSegments.map(s => s.text).join(' '))
+                                          }}
+                                          className="w-full p-2 border border-gray-300 rounded text-sm resize-none dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+                                          rows={Math.max(2, Math.min(5, segmentText.split(' ').length / 10))}
+                                          placeholder="Translation..."
+                                        />
+                                      </div>
+                                    )
+                                  })
+                                })()}
                               </div>
                               
                               {/* Action buttons */}
