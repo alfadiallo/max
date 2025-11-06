@@ -157,7 +157,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         
         // Find matching English segment by timestamp
         const key = `${startFloat.toFixed(2)}-${endFloat.toFixed(2)}`
-        let segmentIdx = timestampToSegmentIndex.get(key)
+        let segmentIdx: number | undefined = timestampToSegmentIndex.get(key)
         
         // If exact match not found, find closest by timestamp
         if (segmentIdx === undefined) {
@@ -166,7 +166,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           )
         }
         
-        if (segmentIdx >= 0 && segmentIdx < segments.length) {
+        // segmentIdx can be -1 from findIndex if not found, or undefined from Map.get
+        if (segmentIdx !== undefined && segmentIdx >= 0 && segmentIdx < segments.length) {
           const englishSeg = segments[segmentIdx]
           parsedSegments[segmentIdx] = {
             id: englishSeg.id, // CRITICAL: Use English segment ID
