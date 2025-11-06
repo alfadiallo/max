@@ -713,7 +713,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           const avgSentenceDuration = segmentDuration / sentences.length
           
           let currentStart = seg.start
-          sentences.forEach((sentence, idx) => {
+          sentences.forEach((sentence: string, idx: number) => {
             const sentenceText = sentence.trim()
             if (!sentenceText) return
             
