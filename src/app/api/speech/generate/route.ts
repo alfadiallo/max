@@ -19,20 +19,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing translation_id or language_code' }, { status: 400 })
     }
 
-    // Get translation first
+    // Get translation first - prefer non-archived translations
     const { data: translation, error: transError } = await supabase
       .from('max_translations')
       .select('*')
       .eq('id', translation_id)
+      .eq('is_archived', false) // Only use current (non-archived) translations
       .single()
 
-    if (transError) {
-      console.error('Translation query error:', transError)
-      return NextResponse.json({ success: false, error: 'Translation not found' }, { status: 404 })
-    }
+    if (transError || !translation) {
+      // If no non-archived translation found, check if translation exists but is archived
+      const { data: archivedTranslation } = await supabase
+        .from('max_translations')
+        .select('*')
+        .eq('id', translation_id)
+        .single()
 
-    if (!translation) {
-      console.error('Translation not found for ID:', translation_id)
+      if (archivedTranslation?.is_archived) {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'This translation is archived and outdated. Please generate a new translation from the current English version.' 
+        }, { status: 400 })
+      }
+
+      console.error('Translation query error:', transError)
       return NextResponse.json({ success: false, error: 'Translation not found' }, { status: 404 })
     }
 

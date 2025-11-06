@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.0] - 2025-11-06
+
+### Fixed
+- **Translation Segment Alignment**: Fixed critical alignment issue between English and translation segments
+  - Translation segments now have identical IDs, timestamps (start/end), and seek values as their corresponding English segments
+  - Ensures perfect 1:1 alignment for side-by-side editing
+  - Translation API now preserves exact English segment structure (only text is translated)
+- **Sentence-Level Editing**: Improved sentence splitting for translation editing
+  - Uses word-level timestamps from Sonix/Whisper for accurate sentence boundaries
+  - Both left (English) and right (translation) columns now have identical timestamps
+  - Perfect vertical alignment in side-by-side view
+- **Translation UI**: Removed old modal popup, improved inline editing experience
+  - Translation text now properly displays in editable fields
+  - Removed confusing popup that appeared before side-by-side view
+  - Fixed translation segment initialization to match English sentence structure
+
+### Changed
+- Translation generation API (`/api/transcriptions/[id]/translate`) now ensures 1:1 segment alignment
+  - Each translation segment inherits exact ID, start, end, and seek from English segment
+  - Improved matching algorithm to handle timestamp variations
+- Display logic updated to match segments by ID first, then by index
+  - Ensures perfect alignment even when sentence counts differ slightly
+  - Timestamps are always preserved from English segments
+
+### Technical Details
+- Updated `src/app/api/transcriptions/[id]/translate/route.ts`:
+  - Segment matching now uses exact ID and timestamp matching
+  - Fallback logic ensures every English segment has a corresponding translation segment
+- Updated `src/components/audio/TranscriptionView.tsx`:
+  - Sentence splitting uses word-level timestamps for accurate boundaries
+  - Translation segments use identical structure as English segments
+  - Fixed initialization to properly display translation text
+
+---
+
 ## [2.0.0] - 2025-11-03
 
 ### Added

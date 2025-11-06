@@ -45,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const prompt = ANALYSIS_USER_PROMPT(transcriptText)
     
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20240620',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 2048,
       system: 'You are an expert content analyst. Return ONLY valid JSON with no additional text.',
       messages: [

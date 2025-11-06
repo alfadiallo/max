@@ -89,7 +89,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [findReplaceResults, setFindReplaceResults] = useState<any[]>([])
   const [selectedFindReplace, setSelectedFindReplace] = useState<Set<number>>(new Set())
   const [user, setUser] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState<'original' | 'edits' | 'final' | 'analysis' | 'translations'>('original')
+  const [activeTab, setActiveTab] = useState<'original' | 'edits' | 'text-translations' | 'speech-translations' | 'final' | 'analysis' | 'translations'>('original')
   const supabase = createClient()
   
   // Check if user is Editor (restricted access)
@@ -111,6 +111,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const [sendingToInsight, setSendingToInsight] = useState(false) // Whether sending to Insight
   const [sentToInsight, setSentToInsight] = useState<string | null>(null) // transcription_id that was sent
   const [sendingToRAG, setSendingToRAG] = useState<string | null>(null) // transcription_id being sent to RAG
+  const [selectedLanguageForEdit, setSelectedLanguageForEdit] = useState<string | null>(null) // language_code for text-translations tab
+  const [editingTextTranslation, setEditingTextTranslation] = useState<string | null>(null) // translation_id being edited in text-translations tab
 
   const loadTranscriptions = async () => {
     setLoading(true)
@@ -158,7 +160,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
 
   // Reset activeTab if Editor tries to access restricted tabs
   useEffect(() => {
-    if (isEditor && (activeTab === 'final' || activeTab === 'analysis' || activeTab === 'translations')) {
+    if (isEditor && (activeTab === 'final' || activeTab === 'analysis' || activeTab === 'translations' || activeTab === 'text-translations' || activeTab === 'speech-translations')) {
       setActiveTab('original')
     }
   }, [isEditor, activeTab])
@@ -630,8 +632,116 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     }
   }
 
+  // Helper function to split text by sentences (1 sentence per segment) using word-level timestamps
+  const splitSegmentsBySentences = (segments: any[]): any[] => {
+    const splitSegments: any[] = []
+    
+    segments.forEach((seg) => {
+      const text = seg.text || ''
+      if (!text.trim()) {
+        splitSegments.push({ ...seg })
+        return
+      }
+      
+      // Split by sentence endings (. ! ?) but be careful with abbreviations
+      // Split on . ! ? followed by space and capital letter, or end of string
+      const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z][a-z])|(?<=[.!?])\s*$/).filter((s: string) => s.trim())
+      
+      if (sentences.length <= 1) {
+        // Already one sentence, keep as is
+        splitSegments.push({ ...seg })
+      } else {
+        // Use word-level timestamps if available for accurate timing
+        const words = seg.words || []
+        
+        if (words.length > 0) {
+          // Build word-to-sentence mapping by matching word order to sentences
+          // Split each sentence into words and match sequentially
+          let wordIdx = 0
+          
+          sentences.forEach((sentence, sentIdx) => {
+            const sentenceText = sentence.trim()
+            if (!sentenceText) return
+            
+            // Split sentence into words (remove punctuation for matching)
+            const sentenceWordsText = sentenceText
+              .replace(/[.,!?;:]/g, ' ')
+              .split(/\s+/)
+              .filter(w => w.length > 0)
+            
+            // Find words that belong to this sentence (sequential matching)
+            const sentenceWords: any[] = []
+            const wordsToMatch = sentenceWordsText.length
+            
+            // Match words sequentially - each sentence gets the next N words
+            for (let i = 0; i < wordsToMatch && wordIdx < words.length; i++) {
+              sentenceWords.push(words[wordIdx])
+              wordIdx++
+            }
+            
+            // Calculate sentence timestamps from word timestamps
+            let sentenceStartTime = seg.start
+            let sentenceEndTime = seg.end
+            
+            if (sentenceWords.length > 0) {
+              // Use first word's start and last word's end
+              sentenceStartTime = sentenceWords[0].start || seg.start
+              sentenceEndTime = sentenceWords[sentenceWords.length - 1].end || seg.end
+            } else {
+              // Fallback: proportional distribution if no words matched
+              const segmentDuration = seg.end - seg.start
+              const avgSentenceDuration = segmentDuration / sentences.length
+              sentenceStartTime = seg.start + (sentIdx * avgSentenceDuration)
+              sentenceEndTime = sentIdx === sentences.length - 1 
+                ? seg.end 
+                : sentenceStartTime + avgSentenceDuration
+            }
+            
+            splitSegments.push({
+              id: seg.id * 10000 + sentIdx,
+              seek: Math.floor(sentenceStartTime * 1000),
+              start: sentenceStartTime,
+              end: sentenceEndTime,
+              text: sentenceText,
+              words: sentenceWords,
+              originalSegmentId: seg.id
+            })
+          })
+        } else {
+          // No word-level timestamps - use proportional distribution
+          const segmentDuration = seg.end - seg.start
+          const avgSentenceDuration = segmentDuration / sentences.length
+          
+          let currentStart = seg.start
+          sentences.forEach((sentence, idx) => {
+            const sentenceText = sentence.trim()
+            if (!sentenceText) return
+            
+            const sentenceEnd = idx === sentences.length - 1 
+              ? seg.end 
+              : Math.min(currentStart + avgSentenceDuration, seg.end)
+            
+            splitSegments.push({
+              id: seg.id * 10000 + idx,
+              seek: Math.floor(currentStart * 1000),
+              start: currentStart,
+              end: sentenceEnd,
+              text: sentenceText,
+              words: [],
+              originalSegmentId: seg.id
+            })
+            
+            currentStart = sentenceEnd
+          })
+        }
+      }
+    })
+    
+    return splitSegments
+  }
+
   const handleEditTranslation = async (translation: any) => {
-    setEditingTranslation(translation.id)
+    // Note: We use editingTextTranslation (not editingTranslation) for the new inline view
     setEditedTranslationText(translation.translated_text)
     
     // Initialize segments array from translation
@@ -673,7 +783,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           start: originalSeg.start,
           end: originalSeg.end,
           text: matched?.text || '',
-          words: []
+          words: [],
+          originalSegmentId: originalSeg.id
         }
       })
     } else if (translation.translated_text && originalSegments.length > 0) {
@@ -695,7 +806,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           start: originalSeg.start,
           end: originalSeg.end,
           text: translatedWords.join(' ') || '',
-          words: []
+          words: [],
+          originalSegmentId: originalSeg.id
         }
       })
     } else {
@@ -706,11 +818,56 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
         start: originalSeg.start,
         end: originalSeg.end,
         text: '',
-        words: []
+        words: [],
+        originalSegmentId: originalSeg.id
       }))
     }
     
-    setEditedTranslationSegments(matchedSegments)
+    // CRITICAL: Split both English and translation segments by sentences using the SAME logic
+    // This ensures perfect 1:1 alignment with identical timestamps
+    
+    // First, split English segments into sentences with accurate word-level timestamps
+    const splitEnglishSegments = splitSegmentsBySentences(originalSegments)
+    
+    // Now, for each split English segment, we need to find the corresponding translation text
+    // We'll split the translation segments the same way
+    const alignedSegments: any[] = []
+    
+    // Process each original segment
+    originalSegments.forEach((originalSeg, segIdx) => {
+      // Get corresponding translation segment - it should have the SAME ID and timestamps
+      const translationSeg = matchedSegments.find((m: any) => m.id === originalSeg.id) || 
+                            matchedSegments[segIdx] || 
+                            { text: '', id: originalSeg.id, start: originalSeg.start, end: originalSeg.end }
+      
+      // Get all split English segments for this original segment
+      const splitEnglishForThisSegment = splitSegmentsBySentences([originalSeg])
+      
+      // Split the translation text into sentences to match
+      const translationText = translationSeg.text || ''
+      const translationSentences = translationText
+        .split(/(?<=[.!?])\s+(?=[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ])/i)
+        .filter((s: string) => s.trim())
+      
+      // For each split English sentence, create a matching translation segment
+      splitEnglishForThisSegment.forEach((splitEngSeg: any, sentIdx: number) => {
+        // CRITICAL: Use the EXACT same timestamps from the split English segment
+        // This ensures perfect alignment
+        const transSentence = translationSentences[sentIdx]?.trim() || ''
+        
+        alignedSegments.push({
+          id: splitEngSeg.id, // Use the same ID structure as English
+          seek: splitEngSeg.seek, // EXACT same seek
+          start: splitEngSeg.start, // EXACT same start timestamp
+          end: splitEngSeg.end, // EXACT same end timestamp
+          text: transSentence,
+          words: [],
+          originalSegmentId: originalSeg.id
+        })
+      })
+    })
+    
+    setEditedTranslationSegments(alignedSegments)
   }
 
   const handleSaveTranslationVersion = async (translationId: string) => {
@@ -719,20 +876,72 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
       const originalTranslation = translations.find((t: any) => t.id === translationId)
       if (!originalTranslation) return
 
-      // Use edited segments or fallback to creating from edited text
-      const segmentsToSave = editedTranslationSegments.length > 0 
-        ? editedTranslationSegments
-        : originalTranslation.json_with_timestamps?.segments?.map((seg: any, idx: number) => ({
-            ...seg,
-            text: editedTranslationText.split(' ').slice(idx, idx + 10).join(' ') // Simplified fallback
-          })) || []
+      // Merge split segments back into original segment structure
+      // Group split segments by their originalSegmentId
+      const segmentsByOriginal: Record<number, any[]> = {}
+      editedTranslationSegments.forEach((seg: any) => {
+        const origId = seg.originalSegmentId || seg.id
+        if (!segmentsByOriginal[origId]) {
+          segmentsByOriginal[origId] = []
+        }
+        segmentsByOriginal[origId].push(seg)
+      })
+
+      // Get original English segments to match structure
+      let originalSegments: any[] = []
+      if (transcriptions.length > 0) {
+        const transcription = transcriptions[0]
+        if (transcription.final_version_id !== undefined) {
+          if (transcription.final_version_id === null) {
+            originalSegments = transcription.json_with_timestamps?.segments || []
+          } else {
+            const finalVersion = transcription.versions?.find((v: any) => v.id === transcription.final_version_id)
+            if (finalVersion) {
+              originalSegments = finalVersion.json_with_timestamps?.segments || []
+            }
+          }
+        }
+      }
+
+      // Reconstruct segments matching original structure
+      const segmentsToSave = originalSegments.map((origSeg) => {
+        const splitSegments = segmentsByOriginal[origSeg.id] || []
+        if (splitSegments.length > 0) {
+          // Merge split segments back into one
+          const mergedText = splitSegments.map((s: any) => s.text).join(' ').trim()
+          const firstSplit = splitSegments[0]
+          const lastSplit = splitSegments[splitSegments.length - 1]
+          
+          return {
+            id: origSeg.id,
+            seek: origSeg.seek,
+            start: origSeg.start,
+            end: origSeg.end,
+            text: mergedText,
+            words: []
+          }
+        } else {
+          // Fallback: use original segment structure
+          return {
+            id: origSeg.id,
+            seek: origSeg.seek,
+            start: origSeg.start,
+            end: origSeg.end,
+            text: origSeg.text || '',
+            words: []
+          }
+        }
+      })
+
+      // Build full text from merged segments
+      const fullText = segmentsToSave.map((seg: any) => seg.text).join(' ').trim() || editedTranslationText
 
       // Save the translation version
       const response = await fetch(`/api/translations/${translationId}/versions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          edited_text: editedTranslationText,
+          edited_text: fullText,
           json_with_timestamps: {
             segments: segmentsToSave
           }
@@ -788,7 +997,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
           await loadSpeechFilesForTranslations(updatedTranslations)
         }
         
-        setEditingTranslation(null)
+        setEditingTextTranslation(null) // Use editingTextTranslation for inline view
         setEditedTranslationText('')
         setEditedTranslationSegments([])
       } else {
@@ -803,9 +1012,68 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   }
 
   const handleCancelEditTranslation = () => {
-    setEditingTranslation(null)
+    setEditingTextTranslation(null) // Use editingTextTranslation for inline view
     setEditedTranslationText('')
     setEditedTranslationSegments([])
+  }
+
+  const handlePromoteToSpeech = async (translationId: string) => {
+    try {
+      const response = await fetch(`/api/translations/${translationId}/promote-to-speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        // Reload translations to get updated state
+        await loadTranslations()
+      } else {
+        alert(`Failed to promote translation to speech: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error promoting translation to speech:', error)
+      alert('Failed to promote translation to speech')
+    }
+  }
+
+  const handleDownloadTranslationText = (translation: any) => {
+    try {
+      // Get the final version or current translation text with timestamps
+      let textToExport = translation.translated_text
+      let segments = translation.json_with_timestamps?.segments || []
+      
+      // If there's a final version, use that
+      if (translation.final_version_id) {
+        // We'd need to fetch the version, but for now use current translation
+        // In a full implementation, we'd fetch the version here
+      }
+      
+      // Create JSON export
+      const exportData = {
+        language_code: translation.language_code,
+        translation_id: translation.id,
+        segments: segments.map((seg: any) => ({
+          start: seg.start,
+          end: seg.end,
+          text: seg.text
+        })),
+        full_text: textToExport
+      }
+      
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `translation_${translation.language_code}_${Date.now()}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error downloading translation text:', error)
+      alert('Failed to download translation text')
+    }
   }
 
   const handleDownloadSpeech = async (audioUrl: string, languageCode: string) => {
@@ -829,9 +1097,9 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     }
   }
 
-  // Load translations when tab switches to translations
+  // Load translations when tab switches to translations-related tabs
   useEffect(() => {
-    if (activeTab === 'translations' && transcriptions.length > 0) {
+    if ((activeTab === 'translations' || activeTab === 'text-translations' || activeTab === 'speech-translations') && transcriptions.length > 0) {
       loadTranslations()
     }
   }, [activeTab, transcriptions])
@@ -887,6 +1155,30 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
             </button>
             {!isEditor && (
               <button
+                onClick={() => setActiveTab('text-translations')}
+                className={`px-4 py-2 text-sm font-medium ${
+                  activeTab === 'text-translations'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Text Translations
+              </button>
+            )}
+            {!isEditor && (
+              <button
+                onClick={() => setActiveTab('speech-translations')}
+                className={`px-4 py-2 text-sm font-medium ${
+                  activeTab === 'speech-translations'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Speech Translations
+              </button>
+            )}
+            {!isEditor && (
+              <button
                 onClick={() => setActiveTab('final')}
                 className={`px-4 py-2 text-sm font-medium ${
                   activeTab === 'final'
@@ -912,18 +1204,6 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                 }`}
               >
                 Analysis {analysis && '✓'}
-              </button>
-            )}
-            {!isEditor && (
-              <button
-                onClick={() => setActiveTab('translations')}
-                className={`px-4 py-2 text-sm font-medium ${
-                  activeTab === 'translations'
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
-              >
-                Translations
               </button>
             )}
           </div>
@@ -1087,7 +1367,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                                           onClick={() => handlePromoteToFinal(version.id)}
                                           className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
                                         >
-                                          Promote to Final
+                                          Ready to Translate
                                         </button>
                                       )}
                                     </div>
@@ -1615,42 +1895,40 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
             </div>
           )}
 
-          {activeTab === 'translations' && !isEditor && (
+          {activeTab === 'text-translations' && !isEditor && (
             <div className="space-y-4">
               {!finalVersion ? (
-                <p className="text-sm text-gray-600 italic text-center py-8">
-                  No final version selected. Go to the <span className="font-medium">Final</span> tab and promote a version to Final first.
+                <p className="text-sm text-gray-600 italic text-center py-8 dark:text-gray-300">
+                  No version ready for translation. Go to the <span className="font-medium">Edits</span> tab and click "Ready to Translate" on a version first.
                 </p>
               ) : (
                 <>
                   <div className="flex items-center justify-between mb-4">
-                    <p className="text-sm text-gray-600">Translate your final transcription into multiple languages:</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Translate and edit your transcription into multiple languages:</p>
                     <div className="flex gap-2">
                       {translationsLoaded && transcriptions.length > 0 && (() => {
                         const allLanguages = [
-                          { code: 'sp', name: 'Spanish' },
-                          { code: 'pr', name: 'Portuguese' },
-                          { code: 'ar', name: 'Arabic' },
-                          { code: 'fr', name: 'French' },
-                          { code: 'ge', name: 'German' },
-                          { code: 'it', name: 'Italian' },
-                          { code: 'ma', name: 'Mandarin' },
-                          { code: 'ja', name: 'Japanese' },
-                          { code: 'hi', name: 'Hindi' }
+                          { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
+                          { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
+                          { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+                          { code: 'fr', name: 'French', flag: '🇫🇷' },
+                          { code: 'ge', name: 'German', flag: '🇩🇪' },
+                          { code: 'it', name: 'Italian', flag: '🇮🇹' },
+                          { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
+                          { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+                          { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
                         ]
                         const existingCodes = translations.map((t: any) => t.language_code)
                         const toTranslate = allLanguages.filter(lang => !existingCodes.includes(lang.code))
                         
-                        if (toTranslate.length === 0) return null // All languages translated
+                        if (toTranslate.length === 0) return null
                         
                         return <button
                           onClick={async () => {
-                            
                             console.log(`Batch translating ${toTranslate.length} languages...`)
                             for (const lang of toTranslate) {
                               console.log(`Translating to ${lang.name}...`)
                               await generateTranslation(lang.code)
-                              // Small delay between translations to avoid rate limits
                               await new Promise(resolve => setTimeout(resolve, 500))
                             }
                             console.log('Batch translation complete!')
@@ -1671,154 +1949,408 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                           )}
                         </button>
                       })()}
-                      {translations.length > 0 && speechLoaded && (() => {
-                        // Count translations without speech
-                        const translationsWithoutSpeech = translations.filter((t: any) => {
-                          const hasSpeech = generatedSpeech.some((s: any) => s.translation_id === t.id && s.status === 'completed')
-                          return !hasSpeech
-                        })
-                        
-                        if (translationsWithoutSpeech.length > 0) {
+                    </div>
+                  </div>
+
+                  {/* Language Selector */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Select Language to Edit:</label>
+                    {translations.length === 0 ? (
+                      <div className="px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-600 text-gray-600 dark:text-gray-400">
+                        No translations yet. Use the "Batch Translate" button above to generate translations first.
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={selectedLanguageForEdit || ''}
+                          onChange={(e) => setSelectedLanguageForEdit(e.target.value || null)}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+                        >
+                          <option value="">-- Select a language --</option>
+                          {[
+                            { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
+                            { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
+                            { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+                            { code: 'fr', name: 'French', flag: '🇫🇷' },
+                            { code: 'ge', name: 'German', flag: '🇩🇪' },
+                            { code: 'it', name: 'Italian', flag: '🇮🇹' },
+                            { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
+                            { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+                            { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
+                          ].map(lang => {
+                            const translation = translations.find((t: any) => t.language_code === lang.code)
+                            if (!translation) return null
+                            return (
+                            <option key={lang.code} value={lang.code}>
+                              {lang.flag} {lang.name} {translation.is_archived ? '(Archived)' : ''}
+                            </option>
+                            )
+                          })}
+                        </select>
+                        {selectedLanguageForEdit && (() => {
+                          const translation = translations.find((t: any) => t.language_code === selectedLanguageForEdit)
+                          if (!translation) return null
+                          
+                          const sourceVersion = translation.source_version
+                          const sourceVersionType = sourceVersion?.version_type || (translation.source_transcription_version_id === null ? 'T-1' : 'Unknown')
+                          const isArchived = translation.is_archived
+                          
                           return (
-                            <button
-                              onClick={async () => {
-                                for (const translation of translationsWithoutSpeech) {
-                                  const langCode = translation.language_code
-                                  await generateSpeech(translation.id, langCode)
-                                  // Small delay to avoid rate limits
-                                  await new Promise(resolve => setTimeout(resolve, 1000))
-                                }
-                              }}
-                              disabled={generatingSpeech !== null}
-                              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm disabled:opacity-50 flex items-center gap-2"
+                            <div className="relative group">
+                              <button
+                                type="button"
+                                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                title="Translation source info"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </button>
+                              <div className="absolute right-0 top-full mt-2 w-64 p-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                <div className="text-sm space-y-2">
+                                  <div>
+                                    <span className="font-semibold text-gray-700 dark:text-gray-300">Source:</span>{' '}
+                                    <span className="text-gray-600 dark:text-gray-400">{sourceVersionType}</span>
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold text-gray-700 dark:text-gray-300">Status:</span>{' '}
+                                    {isArchived ? (
+                                      <span className="text-orange-600 dark:text-orange-400">Archived (Outdated)</span>
+                                    ) : (
+                                      <span className="text-green-600 dark:text-green-400">Current</span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold text-gray-700 dark:text-gray-300">Created:</span>{' '}
+                                    <span className="text-gray-600 dark:text-gray-400">
+                                      {new Date(translation.created_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Side-by-side editing interface */}
+                  {selectedLanguageForEdit && (() => {
+                    const translation = translations.find((t: any) => t.language_code === selectedLanguageForEdit)
+                    if (!translation) return null
+
+                    const isEditing = editingTextTranslation === translation.id
+                    const langInfo = [
+                      { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
+                      { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
+                      { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+                      { code: 'fr', name: 'French', flag: '🇫🇷' },
+                      { code: 'ge', name: 'German', flag: '🇩🇪' },
+                      { code: 'it', name: 'Italian', flag: '🇮🇹' },
+                      { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
+                      { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+                      { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
+                    ].find(l => l.code === selectedLanguageForEdit)
+
+                    // Get English original segments
+                    let englishSegments: any[] = []
+                    if (transcriptions.length > 0) {
+                      const transcription = transcriptions[0]
+                      if (transcription.final_version_id !== undefined) {
+                        if (transcription.final_version_id === null) {
+                          englishSegments = transcription.json_with_timestamps?.segments || []
+                        } else {
+                          const finalVersion = transcription.versions?.find((v: any) => v.id === transcription.final_version_id)
+                          if (finalVersion) {
+                            englishSegments = finalVersion.json_with_timestamps?.segments || []
+                          }
+                        }
+                      }
+                    }
+
+                    // Get translation segments
+                    const translationSegments = translation.json_with_timestamps?.segments || []
+
+                    return (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-semibold dark:text-gray-100">
+                            {langInfo?.flag} {langInfo?.name}
+                          </h3>
+                          {!isEditing && (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingTextTranslation(translation.id)
+                                  handleEditTranslation(translation)
+                                }}
+                                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleFindReplace({
+                                  segments: translationSegments,
+                                  text: translation.translated_text,
+                                  id: translation.id
+                                })}
+                                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm"
+                              >
+                                🔍 Find & Replace
+                              </button>
+                              {translation.final_version_id && (
+                                <button
+                                  onClick={() => handlePromoteToSpeech(translation.id)}
+                                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
+                                >
+                                  Promote to Speech Translation
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {isEditing ? (
+                          <div className="grid grid-cols-2 gap-4">
+                            {/* Left: English Original (Read-only) */}
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-700 mb-2 dark:text-gray-200">English Original (Reference)</h4>
+                              <div className="max-h-[80vh] overflow-y-auto space-y-2">
+                                {(() => {
+                                  // Split English segments by sentences for display
+                                  const splitEnglish = splitSegmentsBySentences(englishSegments)
+                                  return splitEnglish.map((seg: any, idx: number) => (
+                                    <div key={idx} className="p-3 bg-gray-50 rounded border border-gray-200 dark:bg-gray-900 dark:border-gray-700">
+                                      <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
+                                        {formatTime(seg.start)} - {formatTime(seg.end)}
+                                      </div>
+                                      <div className="text-sm leading-relaxed dark:text-gray-100">{seg.text}</div>
+                                    </div>
+                                  ))
+                                })()}
+                              </div>
+                            </div>
+                            
+                            {/* Right: Translated Version (Editable) */}
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Translation (Editable)</h4>
+                              </div>
+                              <div className="max-h-[80vh] overflow-y-auto space-y-2">
+                                {(() => {
+                                  // CRITICAL: Use the SAME split English segments as the left side
+                                  // This ensures perfect timestamp alignment
+                                  const splitEnglish = splitSegmentsBySentences(englishSegments)
+                                  
+                                  // Get translation segments - should already be aligned from handleEditTranslation
+                                  // If empty, initialize using the same split structure
+                                  let translationSegs = editedTranslationSegments
+                                  
+                                  if (translationSegs.length === 0 && translation.translated_text) {
+                                    // Initialize by matching to English segment structure
+                                    // Split translation into sentences to match English sentences
+                                    const translationText = translation.translated_text
+                                    const translationSentences = translationText
+                                      .split(/(?<=[.!?])\s+(?=[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ])/i)
+                                      .filter((s: string) => s.trim())
+                                    
+                                    // Map each English sentence to a translation sentence
+                                    translationSegs = splitEnglish.map((engSeg: any, idx: number) => ({
+                                      id: engSeg.id, // CRITICAL: Same ID as English
+                                      seek: engSeg.seek, // CRITICAL: Same seek as English
+                                      start: engSeg.start, // CRITICAL: Same start timestamp as English
+                                      end: engSeg.end, // CRITICAL: Same end timestamp as English
+                                      text: translationSentences[idx]?.trim() || '',
+                                      words: [],
+                                      originalSegmentId: engSeg.originalSegmentId || engSeg.id
+                                    }))
+                                    
+                                    // Set them so they persist
+                                    if (translationSegs.length > 0) {
+                                      setEditedTranslationSegments(translationSegs)
+                                    }
+                                  }
+                                  
+                                  // CRITICAL: Match by index - both arrays MUST be the same length
+                                  // and have identical timestamps
+                                  return splitEnglish.map((seg: any, idx: number) => {
+                                    // Find translation segment with matching ID or use index
+                                    const translatedSegment = translationSegs.find((t: any) => t.id === seg.id) || 
+                                                             translationSegs[idx] || 
+                                                             { text: '', start: seg.start, end: seg.end, id: seg.id, seek: seg.seek }
+                                    
+                                    // CRITICAL: Use English segment timestamps to ensure alignment
+                                    const segmentText = translatedSegment.text || ''
+                                    
+                                    return (
+                                      <div key={seg.id || idx} className="p-3 bg-blue-50 rounded border border-blue-200 dark:bg-blue-900 dark:border-blue-700">
+                                        <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
+                                          {formatTime(seg.start)} - {formatTime(seg.end)}
+                                        </div>
+                                        <textarea
+                                          value={segmentText}
+                                          onChange={(e) => {
+                                            const newSegments = [...translationSegs]
+                                            // Ensure array is long enough
+                                            while (newSegments.length <= idx) {
+                                              newSegments.push({ 
+                                                text: '', 
+                                                start: seg.start, 
+                                                end: seg.end,
+                                                id: seg.id,
+                                                seek: seg.seek,
+                                                originalSegmentId: seg.originalSegmentId
+                                              })
+                                            }
+                                            // Update or create segment with EXACT same timestamps as English
+                                            newSegments[idx] = {
+                                              id: seg.id, // CRITICAL: Same ID
+                                              seek: seg.seek, // CRITICAL: Same seek
+                                              start: seg.start, // CRITICAL: Same start timestamp
+                                              end: seg.end, // CRITICAL: Same end timestamp
+                                              text: e.target.value,
+                                              words: [],
+                                              originalSegmentId: seg.originalSegmentId || seg.id
+                                            }
+                                            setEditedTranslationSegments(newSegments)
+                                            setEditedTranslationText(newSegments.map(s => s.text).join(' '))
+                                          }}
+                                          className="w-full p-2 border border-gray-300 rounded text-sm resize-none dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+                                          rows={Math.max(2, Math.min(4, Math.ceil(segmentText.length / 50)))}
+                                          placeholder="Translation..."
+                                        />
+                                      </div>
+                                    )
+                                  })
+                                })()}
+                              </div>
+                              
+                              {/* Action buttons */}
+                              <div className="flex gap-2 mt-4">
+                                <button
+                                  onClick={() => handleSaveTranslationVersion(translation.id)}
+                                  disabled={savingTranslation}
+                                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
+                                >
+                                  {savingTranslation ? 'Saving...' : 'Save Version'}
+                                </button>
+                                <button
+                                  onClick={handleCancelEditTranslation}
+                                  disabled={savingTranslation}
+                                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-white border border-gray-300 rounded-lg p-4 dark:bg-gray-800 dark:border-gray-600">
+                            <p className="text-sm text-gray-600 dark:text-gray-300">
+                              {translation.translated_text || 'No translation text available'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'speech-translations' && !isEditor && (
+            <div className="space-y-4">
+              {translations.length === 0 ? (
+                <p className="text-sm text-gray-600 italic text-center py-8 dark:text-gray-300">
+                  No translations available. Go to <span className="font-medium">Text Translations</span> to create translations first.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                    Generated speech for translations that have been promoted to speech translation:
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      { code: 'sp', name: 'Spanish', flag: '🇪🇸' },
+                      { code: 'pr', name: 'Portuguese', flag: '🇵🇹' },
+                      { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+                      { code: 'fr', name: 'French', flag: '🇫🇷' },
+                      { code: 'ge', name: 'German', flag: '🇩🇪' },
+                      { code: 'it', name: 'Italian', flag: '🇮🇹' },
+                      { code: 'ma', name: 'Mandarin', flag: '🇨🇳' },
+                      { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+                      { code: 'hi', name: 'Hindi', flag: '🇮🇳' }
+                    ].map(lang => {
+                      const translation = translations.find((t: any) => t.language_code === lang.code && t.final_version_id)
+                      if (!translation) return null
+
+                      const speech = generatedSpeech.find((s: any) => 
+                        s.translation_id === translation.id && 
+                        s.language_code === lang.code &&
+                        s.status === 'completed'
+                      )
+                      const isGenerating = generatingSpeech === translation.id
+
+                      return (
+                        <div key={lang.code} className="border border-gray-300 rounded-lg p-4 bg-white dark:bg-gray-800 dark:border-gray-600">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl">{lang.flag}</span>
+                              <div>
+                                <div className="font-semibold text-sm dark:text-gray-100">{lang.name}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">{lang.code}</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {speech ? (
+                            <div className="space-y-2">
+                              <div className="border border-green-200 rounded p-2 bg-green-50 dark:bg-green-900 dark:border-green-700">
+                                <div className="text-xs text-gray-600 mb-1 dark:text-gray-400">🎵 Generated Audio</div>
+                                <audio controls className="w-full" src={speech.audio_url}></audio>
+                                <div className="flex gap-2 mt-2">
+                                  <button 
+                                    onClick={() => handleDownloadSpeech(speech.audio_url, lang.code)}
+                                    className="flex-1 px-3 py-2 bg-green-600 text-white text-xs rounded hover:bg-green-700 text-center"
+                                  >
+                                    ↓ Download Audio
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDownloadTranslationText(translation)}
+                                    className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 text-center"
+                                  >
+                                    ↓ Download Text
+                                  </button>
+                                  <button 
+                                    onClick={() => generateSpeech(translation.id, lang.code)}
+                                    disabled={isGenerating}
+                                    className="flex-1 px-3 py-2 bg-orange-600 text-white text-xs rounded hover:bg-orange-700 disabled:opacity-50"
+                                    title="Regenerate speech"
+                                  >
+                                    🔄 Re-gen
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => generateSpeech(translation.id, lang.code)}
+                              disabled={isGenerating}
+                              className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                              {generatingSpeech !== null ? (
+                              {isGenerating ? (
                                 <>
                                   <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                   </svg>
-                                  Generating Speech...
+                                  Generating...
                                 </>
                               ) : (
-                                `🎵 Generate Speech for ${translationsWithoutSpeech.length} Languages`
+                                '🎵 Generate Speech'
                               )}
-                            </button>
-                          )
-                        }
-                        return null
-                      })()}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    {/* Languages array */}
-                    {[
-                      { flag: '🇪🇸', name: 'Spanish', code: 'sp' },
-                      { flag: '🇵🇹', name: 'Portuguese', code: 'pr' },
-                      { flag: '🇸🇦', name: 'Arabic', code: 'ar' },
-                      { flag: '🇫🇷', name: 'French', code: 'fr' },
-                      { flag: '🇩🇪', name: 'German', code: 'ge' },
-                      { flag: '🇮🇹', name: 'Italian', code: 'it' },
-                      { flag: '🇨🇳', name: 'Mandarin', code: 'ma' },
-                      { flag: '🇯🇵', name: 'Japanese', code: 'ja' },
-                      { flag: '🇮🇳', name: 'Hindi', code: 'hi' }
-                    ].map((lang) => {
-                      const translation = translations.find((t: any) => t.language_code === lang.code)
-                      const isGenerating = generatingTranslation === lang.code
-                      const status = translation ? 'Complete' : isGenerating ? 'In Progress' : 'Not Started'
-                      const statusColor = translation ? 'bg-green-100 text-green-800' : isGenerating ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
-
-                      return (
-                        <div key={lang.code} className="border border-gray-300 rounded-lg p-4 bg-white">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-2xl">{lang.flag}</span>
-                              <div>
-                                <div className="font-semibold text-sm">{lang.name}</div>
-                                <div className="text-xs text-gray-500">{lang.code}</div>
-                              </div>
-                            </div>
-                            <span className={`px-2 py-1 rounded text-xs ${statusColor}`}>{status}</span>
-                          </div>
-                          {isGenerating ? (
-                            <div className="w-full px-4 py-2 bg-yellow-600 text-white rounded text-sm flex items-center justify-center gap-2">
-                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Generating...
-                            </div>
-                          ) : translation ? (
-                            <div className="space-y-2">
-                              <div className="flex gap-2">
-                                <button 
-                                  onClick={() => handleEditTranslation(translation)}
-                                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-                                >
-                                  Edit
-                                </button>
-                              </div>
-                              {/* Speech Generation */}
-                              {(() => {
-                                const speech = generatedSpeech.find((s: any) => 
-                                  s.translation_id === translation.id && 
-                                  s.language_code === lang.code
-                                )
-                                const isGenerating = generatingSpeech === translation.id
-                                
-                                return (
-                                  <div className="space-y-2">
-                                    {speech ? (
-                                      <div className="border border-green-200 rounded p-2 bg-green-50">
-                                        <div className="text-xs text-gray-600 mb-1">🎵 Generated Audio</div>
-                                        <audio controls className="w-full" src={speech.audio_url}></audio>
-                                        <div className="flex gap-2 mt-2">
-                                          <button 
-                                            onClick={() => handleDownloadSpeech(speech.audio_url, lang.code)}
-                                            className="flex-1 px-3 py-2 bg-green-600 text-white text-xs rounded hover:bg-green-700 text-center"
-                                          >
-                                            ↓ Download
-                                          </button>
-                                          <button 
-                                            onClick={() => generateSpeech(translation.id, lang.code)}
-                                            disabled={isGenerating}
-                                            className="flex-1 px-3 py-2 bg-orange-600 text-white text-xs rounded hover:bg-orange-700 disabled:opacity-50"
-                                            title="Delete and regenerate speech"
-                                          >
-                                            🔄 Re-gen
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <button 
-                                        onClick={() => generateSpeech(translation.id, lang.code)}
-                                        disabled={isGenerating}
-                                        className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm disabled:opacity-50 flex items-center justify-center gap-2"
-                                      >
-                                        {isGenerating ? (
-                                          <>
-                                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                            Generating...
-                                          </>
-                                        ) : (
-                                          '🎵 Generate Speech'
-                                        )}
-                                      </button>
-                                    )}
-                                  </div>
-                                )
-                              })()}
-                            </div>
-                          ) : (
-                            <button 
-                              onClick={() => generateTranslation(lang.code)}
-                              disabled={isGenerating}
-                              className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm disabled:opacity-50"
-                            >
-                              Generate Translation
                             </button>
                           )}
                         </div>
@@ -1830,138 +2362,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
             </div>
           )}
 
-          {/* Translation Edit Modal - Split View */}
-          {editingTranslation && (() => {
-            const translation = translations.find((t: any) => t.id === editingTranslation)
-            if (!translation) return null
-            
-            // Get original English text from final version
-            let originalEnglishText = ''
-            let originalSegments: any[] = []
-            
-            if (transcriptions.length > 0) {
-              const transcription = transcriptions[0]
-              if (transcription.final_version_id !== undefined) {
-                if (transcription.final_version_id === null) {
-                  // T-1 is final
-                  originalEnglishText = transcription.raw_text
-                  originalSegments = transcription.json_with_timestamps?.segments || []
-                } else {
-                  // A version is final
-                  const finalVersion = transcription.versions?.find((v: any) => v.id === transcription.final_version_id)
-                  if (finalVersion) {
-                    originalEnglishText = finalVersion.edited_text
-                    originalSegments = finalVersion.json_with_timestamps?.segments || []
-                  }
-                }
-              }
-            }
-            
-            return (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => {
-                if (e.target === e.currentTarget) handleCancelEditTranslation()
-              }}>
-                <div className="bg-white p-6 rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col dark:bg-gray-800">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold">Edit Translation - Side by Side View</h3>
-                    <button
-                      onClick={handleCancelEditTranslation}
-                      className="text-gray-500 hover:text-gray-700"
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                  
-                  {/* Split View */}
-                  <div className="flex gap-4 flex-1 overflow-hidden">
-                    {/* Left: Original English */}
-                    <div className="flex-1 border-r border-gray-300 pr-4 overflow-y-auto">
-                      <h4 className="text-sm font-semibold text-gray-600 mb-2">English Original (Reference)</h4>
-                      {originalSegments.length > 0 ? (
-                        <div className="space-y-3">
-                          {originalSegments.map((seg: any, idx: number) => (
-                            <div key={idx} className="p-3 bg-gray-50 rounded border border-gray-200">
-                              <div className="text-xs text-gray-500 mb-1">
-                                {formatTime(seg.start)} - {formatTime(seg.end)}
-                              </div>
-                              <div className="text-sm leading-relaxed">{seg.text}</div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="p-4 bg-gray-50 rounded text-sm text-gray-600">
-                          {originalEnglishText || 'No segments available'}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Right: Translated Version (Editable) */}
-                    <div className="flex-1 overflow-y-auto">
-                      <h4 className="text-sm font-semibold text-gray-600 mb-2">Translation (Editable)</h4>
-                      {originalSegments.length > 0 && (
-                        <div className="space-y-3">
-                          {originalSegments.map((seg: any, idx: number) => {
-                            const translatedSegment = editedTranslationSegments[idx] || { text: '', start: seg.start, end: seg.end }
-                            const segmentText = translatedSegment.text || ''
-                            
-                            return (
-                              <div key={idx} className="p-3 bg-blue-50 rounded border border-blue-200">
-                                <div className="text-xs text-gray-500 mb-1">
-                                  {formatTime(seg.start)} - {formatTime(seg.end)}
-                                </div>
-                                <textarea
-                                  value={segmentText}
-                                  onChange={(e) => {
-                                    const newSegments = [...editedTranslationSegments]
-                                    if (!newSegments[idx]) {
-                                      newSegments[idx] = {
-                                        id: seg.id,
-                                        seek: seg.seek,
-                                        start: seg.start,
-                                        end: seg.end,
-                                        text: e.target.value,
-                                        words: []
-                                      }
-                                    } else {
-                                      newSegments[idx] = { ...newSegments[idx], text: e.target.value }
-                                    }
-                                    setEditedTranslationSegments(newSegments)
-                                    setEditedTranslationText(newSegments.map(s => s.text).join(' '))
-                                  }}
-                                  className="w-full p-2 border border-gray-300 rounded text-sm resize-none"
-                                  rows={3}
-                                  placeholder="Translation..."
-                                />
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex gap-3 justify-end mt-4 pt-4 border-t border-gray-200">
-                    <button
-                      onClick={handleCancelEditTranslation}
-                      className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={() => handleSaveTranslationVersion(editingTranslation)}
-                      disabled={savingTranslation}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {savingTranslation ? 'Saving...' : 'Save Version'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
+          {/* Old translations tab and modal removed - functionality moved to Text Translations and Speech Translations tabs */}
         </div>
       )}
 
