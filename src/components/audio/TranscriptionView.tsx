@@ -322,7 +322,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   // Helper function to update edited segment tracking (compare against initial state)
   const updateEditedSegments = (segments: any[]) => {
     const editedIndices = new Set<number>()
-    segments.forEach((seg, idx) => {
+    segments.forEach((seg: any, idx: number) => {
       const initialSeg = initialSegments[idx]
       if (initialSeg && seg.text !== initialSeg.text) {
         editedIndices.add(idx)
@@ -636,7 +636,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
   const splitSegmentsBySentences = (segments: any[]): any[] => {
     const splitSegments: any[] = []
     
-    segments.forEach((seg) => {
+    segments.forEach((seg: any) => {
       const text = seg.text || ''
       if (!text.trim()) {
         splitSegments.push({ ...seg })
@@ -834,7 +834,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     const alignedSegments: any[] = []
     
     // Process each original segment
-    originalSegments.forEach((originalSeg, segIdx) => {
+    originalSegments.forEach((originalSeg: any, segIdx: number) => {
       // Get corresponding translation segment - it should have the SAME ID and timestamps
       const translationSeg = matchedSegments.find((m: any) => m.id === originalSeg.id) || 
                             matchedSegments[segIdx] || 

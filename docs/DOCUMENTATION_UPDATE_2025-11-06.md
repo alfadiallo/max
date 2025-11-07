@@ -81,6 +81,20 @@ These files addressed specific issues that have been resolved and are no longer 
 
 - 10 files moved to `docs/archives/troubleshooting-fixes/`
 
+## Recent Fixes (Today)
+
+### TypeScript Compilation Fixes
+- Fixed implicit `any` type errors in `TranscriptionView.tsx` forEach callbacks
+- Added explicit type annotations: `(sentence: string, idx: number) => {}`
+- Fixed two occurrences at lines 662 and 716
+
+### Sonix Import Error Fix
+- Fixed error handling for empty segments in Sonix transcript conversion
+- Changed behavior: now skips empty segments instead of throwing errors
+- Segments with no text or empty words array are filtered out gracefully
+- Only throws error if ALL segments are empty (indicating real problem)
+- Updated `src/lib/utils/sonixConverter.ts` to handle edge cases
+
 ## Next Steps
 
 For future updates:
