@@ -327,12 +327,9 @@ export function convertSonixJSONToMaxFormat(
                 typeof seg.end === 'number' ? seg.end : null
     
     if (start === null || end === null || typeof start !== 'number' || typeof end !== 'number') {
-      throw new Error(
-        `Invalid segment at index ${idx}: missing or invalid start/end times. ` +
-        `Has start_time: ${typeof seg.start_time}, end_time: ${typeof seg.end_time}, ` +
-        `start: ${typeof seg.start}, end: ${typeof seg.end}. ` +
-        `Segment: ${JSON.stringify(seg).substring(0, 200)}`
-      )
+      // Skip segments with invalid timing instead of throwing
+      console.warn(`Skipping segment at index ${idx}: missing or invalid start/end times. Segment: ${JSON.stringify(seg).substring(0, 200)}`)
+      return null
     }
 
     // Build text from words if text field is missing, or use text field if present
@@ -358,11 +355,11 @@ export function convertSonixJSONToMaxFormat(
       }
     }
     
-    if (!segmentText || typeof segmentText !== 'string') {
-      throw new Error(
-        `Invalid segment at index ${idx}: missing or invalid text. ` +
-        `Segment: ${JSON.stringify(seg).substring(0, 200)}`
-      )
+    // Skip segments with no text instead of throwing an error
+    // This can happen with empty segments that have timing but no content
+    if (!segmentText || typeof segmentText !== 'string' || segmentText.trim().length === 0) {
+      console.warn(`Skipping segment at index ${idx}: missing or invalid text. Segment: ${JSON.stringify(seg).substring(0, 200)}`)
+      return null
     }
 
     // Convert words array - Sonix uses 'text' for word text, start_time/end_time for timing
@@ -388,7 +385,15 @@ export function convertSonixJSONToMaxFormat(
       text: segmentText,
       words: words
     }
-  })
+  }).filter((seg): seg is NonNullable<typeof seg> => seg !== null)
+
+  // Ensure we have at least some valid segments
+  if (segments.length === 0) {
+    throw new Error(
+      'Sonix transcript contains no valid segments with text content. ' +
+      `Original segment count: ${sonixJSON.segments.length}`
+    )
+  }
 
   const duration = segments.length > 0 
     ? segments[segments.length - 1].end 
