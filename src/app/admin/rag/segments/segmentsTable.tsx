@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { formatDistanceToNow } from 'date-fns'
 
 interface SegmentRelevance {
   relevance_dentist?: number | null
@@ -61,6 +60,23 @@ const formatTimeInterval = (value: string | null) => {
 }
 
 const relevanceToBadges = (relevance: SegmentRelevance | null | undefined) => {
+const formatRelativeTime = (value: string | null | undefined) => {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  const diffMs = Date.now() - date.getTime()
+  const diffSeconds = Math.round(diffMs / 1000)
+  const diffMinutes = Math.round(diffSeconds / 60)
+  const diffHours = Math.round(diffMinutes / 60)
+  const diffDays = Math.round(diffHours / 24)
+
+  if (Math.abs(diffSeconds) < 45) return `${diffSeconds}s ago`
+  if (Math.abs(diffMinutes) < 45) return `${diffMinutes}m ago`
+  if (Math.abs(diffHours) < 36) return `${diffHours}h ago`
+  return `${diffDays}d ago`
+}
+
   if (!relevance) return []
   const entries: Array<{ label: string; score: number }> = []
   const map: Record<string, string> = {
@@ -311,7 +327,7 @@ export default function SegmentsTable() {
                       <td className="px-4 py-3 align-top text-xs text-gray-600 dark:text-gray-300">
                         <div>{new Date(segment.created_at).toLocaleString()}</div>
                         <div className="text-gray-400">
-                          {formatDistanceToNow(new Date(segment.created_at), { addSuffix: true })}
+                          {formatRelativeTime(segment.created_at)}
                         </div>
                       </td>
                       <td className="px-4 py-3 align-top text-xs text-gray-600 dark:text-gray-300">
