@@ -83,31 +83,11 @@ serve(async (req) => {
   } = payload;
 
   if (!versionLabel || !transcriptText || !reviewerId) {
-    return new Response(
-      JSON.stringify({ error: "Missing required fields (versionLabel, transcriptText, reviewerId)" } satisfies ErrorResponse),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+    return jsonResponse({ error: "Missing required fields (versionLabel, transcriptText, reviewerId)" }, { status: 400 });
   }
 
   const client = supabase;
   const db = client;
-
-  if (sourceId) {
-    const { data: existingSource, error: fetchSourceError } = await db
-      .from("content_sources")
-      .select("id, transcription_status")
-      .eq("id", sourceId)
-      .maybeSingle();
-
-    if (fetchSourceError) {
-      console.error("Failed to verify existing content source", fetchSourceError);
-      return jsonResponse({ error: "Unable to verify content source", details: fetchSourceError }, { status: 500 });
-    }
-
-    if (existingSource && existingSource.transcription_status !== "human_verified" && existingSource.transcription_status !== "queued_for_rag") {
-      return jsonResponse({ error: "Source must be human_verified before submitting to RAG" }, { status: 422 });
-    }
-  }
 
   const now = new Date().toISOString();
   const { data: version, error: versionInsertError } = await db
