@@ -1,7 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { FolderOpen, Sparkles, Search, Bot, FileSearch, Edit3, Users, Video } from 'lucide-react'
+import { useEffect, useState, type ComponentType } from 'react'
+import {
+  FolderOpen,
+  Sparkles,
+  Search,
+  Bot,
+  FileSearch,
+  Edit3,
+  Users,
+  Video,
+  BarChart3,
+} from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
@@ -46,85 +56,145 @@ export default function DashboardPage() {
 
   const isAdmin = user?.user_metadata?.role === 'Admin' || user?.user_metadata?.role === 'admin'
 
+  type LinkVariant = 'default' | 'highlight' | 'green' | 'blue'
+
+  interface DashboardLink {
+    href: string
+    title: string
+    description: string
+    icon: ComponentType<{ className?: string }>
+    variant?: LinkVariant
+  }
+
+  const contentLinks: DashboardLink[] = [
+    {
+      href: '/projects',
+      title: 'Transcription & Translations',
+      description: 'Manage your audio translations',
+      icon: FolderOpen,
+    },
+    {
+      href: '/insight/review',
+      title: 'Content Review',
+      description: 'Review and approve generated content',
+      icon: Sparkles,
+    },
+    {
+      href: '/insight',
+      title: 'Insights',
+      description: 'Transcript parsing and data management',
+      icon: Search,
+    },
+    {
+      href: '/rag',
+      title: 'RAG Search',
+      description: 'AI-powered semantic search across knowledge base',
+      icon: Bot,
+      variant: 'highlight',
+    },
+    {
+      href: '/insight/search',
+      title: 'Text Search',
+      description: 'Exact text matching in transcripts',
+      icon: FileSearch,
+    },
+    {
+      href: '/corrections',
+      title: 'Corrections',
+      description: 'Review transcription edits and corrections',
+      icon: Edit3,
+    },
+  ]
+
+  const adminLinks: DashboardLink[] = [
+    {
+      href: '/admin/sonix/import',
+      title: 'Import from Sonix',
+      description: 'Import existing video transcriptions',
+      icon: Video,
+      variant: 'green',
+    },
+    {
+      href: '/admin/rag',
+      title: 'RAG Dashboard',
+      description: 'Monitor ingestion jobs, content, and analytics',
+      icon: BarChart3,
+      variant: 'highlight',
+    },
+    {
+      href: '/admin/users',
+      title: 'Manage Users',
+      description: 'Invite and manage team members',
+      icon: Users,
+      variant: 'blue',
+    },
+  ]
+
+  const variantClasses: Record<LinkVariant, string> = {
+    default: 'bg-white shadow hover:shadow-lg dark:bg-gray-950 dark:border dark:border-gray-800',
+    highlight:
+      'bg-white shadow hover:shadow-lg border-2 border-purple-300 dark:bg-gray-950 dark:border-purple-400/40',
+    green:
+      'bg-white shadow hover:shadow-lg border-2 border-green-300 dark:bg-gray-950 dark:border-green-500',
+    blue:
+      'bg-white shadow hover:shadow-lg border-2 border-blue-300 dark:bg-gray-950 dark:border-blue-500',
+  }
+
+  const LinkCard = ({ link }: { link: DashboardLink }) => {
+    const Icon = link.icon
+    const variant = link.variant ?? 'default'
+
+    return (
+      <a
+        href={link.href}
+        className={`rounded-lg p-6 transition ${variantClasses[variant]}`}
+      >
+        <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
+          <Icon className="h-5 w-5" />
+          {link.title}
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300">{link.description}</p>
+      </a>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Global header renders via RootLayout */}
-      
+
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div className="mt-8">
+        <div className="mt-8 space-y-10">
+          <section>
+            <div className="mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Content</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Access the core tools for managing, reviewing, and searching knowledge.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {contentLinks.map((link) => (
+                <LinkCard key={link.href} link={link} />
+              ))}
+            </div>
+          </section>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <a href="/projects" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800">
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
-                <FolderOpen className="h-5 w-5" />
-                Transcription & Translations
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300">Manage your audio translations</p>
-            </a>
-            
-            <a href="/insight/review" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800">
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
-                <Sparkles className="h-5 w-5" />
-                Content Review
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300">Review and approve generated content</p>
-            </a>
-            
-            <a href="/insight" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800">
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
-                <Search className="h-5 w-5" />
-                Insights
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300">Transcript parsing and data management</p>
-            </a>
-
-            <a href="/rag" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition border-2 border-purple-300 dark:bg-gray-950 dark:border-purple-400/40">
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
-                <Bot className="h-5 w-5" />
-                RAG Search
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300">AI-powered semantic search across knowledge base</p>
-            </a>
-
-            <a href="/insight/search" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800">
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
-                <FileSearch className="h-5 w-5" />
-                Text Search
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300">Exact text matching in transcripts</p>
-            </a>
-
-            <a href="/corrections" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800">
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
-                <Edit3 className="h-5 w-5" />
-                Corrections
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300">Review transcription edits and corrections</p>
-            </a>
-
-            {isAdmin && (
-              <>
-                <a href="/admin/sonix/import" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800 border-2 border-green-300 dark:border-green-500">
-                  <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
-                    <Video className="h-5 w-5" />
-                    Import from Sonix
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-300">Import existing video transcriptions</p>
-                </a>
-
-                <a href="/admin/users" className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition dark:bg-gray-950 dark:border dark:border-gray-800 border-2 border-blue-300 dark:border-blue-500">
-                  <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
-                    <Users className="h-5 w-5" />
-                    Manage Users
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-300">Invite and manage team members</p>
-                </a>
-              </>
-            )}
-          </div>
+          {isAdmin && (
+            <section>
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Admin</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Administrative utilities for ingestion, monitoring, and user management.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {adminLinks.map((link) => (
+                  <LinkCard key={link.href} link={link} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       </main>
     </div>
   )
 }
-
