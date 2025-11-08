@@ -1424,12 +1424,31 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                                         🔍 Find & Replace
                                       </button>
                                       {!isEditor && (
-                                        <button
-                                          onClick={() => handlePromoteToFinal(version.id)}
-                                          className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
-                                        >
-                                          Ready to Translate
-                                        </button>
+                                        <>
+                                          <button
+                                            onClick={() => handlePromoteToFinal(version.id)}
+                                            className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                                          >
+                                            Ready to Translate
+                                          </button>
+                                          {version.type?.toUpperCase().startsWith('H') && (
+                                            <button
+                                              onClick={() =>
+                                                handleSendToRAG(transcription, {
+                                                  id: version.id,
+                                                  type: version.type,
+                                                  text: version.text,
+                                                  segments: version.segments,
+                                                  metadata: transcription.json_with_timestamps?.metadata || null
+                                                })
+                                              }
+                                              disabled={sendingToRAG === transcription.id}
+                                              className="text-xs px-3 py-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                              {sendingToRAG === transcription.id ? 'Sending…' : 'Push to Max RAG'}
+                                            </button>
+                                          )}
+                                        </>
                                       )}
                                     </div>
                                   )}
