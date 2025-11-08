@@ -15,6 +15,9 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const BATCH_SIZE = Number(Deno.env.get("RAG_WORKER_BATCH") ?? "5");
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
+const OPENAI_EMBEDDING_MODEL = Deno.env.get("RAG_EMBEDDING_MODEL") ?? "text-embedding-3-small";
+const EMBEDDING_CHUNK_CHAR_LIMIT = Number(Deno.env.get("RAG_EMBEDDING_CHAR_LIMIT") ?? "3200");
+const EMBEDDING_BATCH_SIZE = Number(Deno.env.get("RAG_EMBEDDING_BATCH") ?? "16");
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 const ANTHROPIC_MODEL = Deno.env.get("RAG_CLAUDE_MODEL") ?? "claude-3-5-sonnet-20241022";
 const SLACK_WEBHOOK_URL = Deno.env.get("SLACK_WEBHOOK_URL") ?? "";
@@ -29,6 +32,51 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const anthropicEnabled = Boolean(ANTHROPIC_API_KEY);
+
+function chunkTextForEmbedding(text: string, limit = EMBEDDING_CHUNK_CHAR_LIMIT): string[] {
+  const cleaned = text?.trim();
+  if (!cleaned) return [];
+  if (cleaned.length <= limit) return [cleaned];
+
+  const chunks: string[] = [];
+  let remaining = cleaned;
+
+  while (remaining.length > limit) {
+    let cutIndex = remaining.lastIndexOf(" ", limit);
+    if (cutIndex < limit * 0.6) {
+      cutIndex = limit;
+    }
+    const chunk = remaining.slice(0, cutIndex).trim();
+    if (chunk.length > 0) {
+      chunks.push(chunk);
+    }
+    remaining = remaining.slice(cutIndex).trim();
+  }
+
+  if (remaining.length > 0) {
+    chunks.push(remaining);
+  }
+
+  return chunks;
+}
+
+function averageVectors(vectors: number[][]): number[] | null {
+  if (!vectors || vectors.length === 0) return null;
+  const length = vectors[0]?.length ?? 0;
+  if (length === 0) return null;
+
+  const totals = new Array<number>(length).fill(0);
+  for (const vector of vectors) {
+    if (!vector || vector.length !== length) {
+      return null;
+    }
+    for (let i = 0; i < length; i += 1) {
+      totals[i] += vector[i] ?? 0;
+    }
+  }
+  const divisor = vectors.length;
+  return totals.map((value) => value / divisor);
+}
 
 type RelevanceScores = {
   dentist?: number | null;
@@ -336,19 +384,53 @@ serve(async (req) => {
         continue;
       }
 
-      let embeddings: number[][] = []
-      let embeddingModel = null
+      const segmentEmbeddings: Array<number[] | null> = segments.map(() => null);
+      let embeddingModel: string | null = null;
+      let embeddingChunksGenerated = 0;
+
       if (openai) {
-        try {
-          const embeddingResponse = await openai.embeddings.create({
-            model: "text-embedding-3-small",
-            input: segments.map((segment) => segment.text),
-          });
-          embeddings = embeddingResponse.data.map((item) => item.embedding as number[]);
-          embeddingModel = embeddingResponse.model ?? "text-embedding-3-small";
-        } catch (embeddingError) {
-          console.error("process_rag_queue: embedding generation failed", embeddingError);
-          embeddings = [];
+        for (let idx = 0; idx < segments.length; idx += 1) {
+          const segment = segments[idx];
+          const chunks = chunkTextForEmbedding(segment.text);
+          if (chunks.length === 0) {
+            console.warn("process_rag_queue: segment produced no chunks for embedding", {
+              versionId: version.id,
+              sequence: segment.sequence_number,
+            });
+            continue;
+          }
+
+          const chunkVectors: number[][] = [];
+          try {
+            for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH_SIZE) {
+              const batch = chunks.slice(start, start + EMBEDDING_BATCH_SIZE);
+              const response = await openai.embeddings.create({
+                model: OPENAI_EMBEDDING_MODEL,
+                input: batch,
+              });
+              embeddingModel = response.model ?? OPENAI_EMBEDDING_MODEL;
+              response.data.forEach((item) => {
+                embeddingChunksGenerated += 1;
+                chunkVectors.push(item.embedding as number[]);
+              });
+            }
+          } catch (embeddingError) {
+            console.error("process_rag_queue: embedding generation failed", {
+              versionId: version.id,
+              sequence: segment.sequence_number,
+              error: embeddingError,
+            });
+            await sendSlackAlert(":warning: RAG embedding generation failed", {
+              version_id: version.id,
+              segment_sequence: segment.sequence_number,
+              error: formatErrorDetail(embeddingError),
+            });
+          }
+
+          const averaged = averageVectors(chunkVectors);
+          if (averaged) {
+            segmentEmbeddings[idx] = averaged;
+          }
         }
       } else {
         console.warn("process_rag_queue: OPENAI_API_KEY missing, skipping embedding generation");
@@ -370,7 +452,7 @@ serve(async (req) => {
         sequence_number: segment.sequence_number,
         start_timestamp: segment.start_time,
         end_timestamp: segment.end_time,
-        embedding: embeddings[idx] ?? null,
+        embedding: segmentEmbeddings[idx] ?? null,
         metadata: {
           transcript_version_id: version.id,
           transcript_segment_id: segment.id,
@@ -552,8 +634,12 @@ serve(async (req) => {
         })
         .eq("id", version.source_id);
 
+      const embeddingsCreated = segmentEmbeddings.filter((embedding) => Array.isArray(embedding)).length;
+
       const resultSummary = {
         segments_processed: insertedSegments.length,
+        embeddings_created: embeddingsCreated,
+        embedding_chunks: embeddingChunksGenerated,
         entities_linked: entitiesLinked,
         relationships_linked: relationshipsLinked,
         duration_ms: Math.round(performance.now() - jobStart),

@@ -6,6 +6,7 @@ import nextDynamic from 'next/dynamic'
 export const dynamic = 'force-dynamic'
 
 const RunWorkerButton = nextDynamic(() => import('./RunWorkerButton'), { ssr: false })
+const ResetRAGButton = nextDynamic(() => import('./ResetRAGButton'), { ssr: false })
 
 interface QueueEntry {
   id: string
@@ -256,6 +257,7 @@ export default async function RAGDashboardPage() {
               View Segments →
             </Link>
             <RunWorkerButton />
+            <ResetRAGButton />
           </div>
         </div>
 
