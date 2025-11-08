@@ -66,7 +66,19 @@ export async function POST(request: Request) {
       })
     }
 
-    const enrichedResults = (results || []).map((result: any) => {
+    type EnrichedResult = {
+      chunk_id: string
+      source_id: string | null
+      version_id: string | null
+      segment_text: string
+      start_timestamp: string | null
+      end_timestamp: string | null
+      distance: number
+      audio_file_name: string | null
+      project_name: string | null
+    }
+
+    const enrichedResults: EnrichedResult[] = (results || []).map((result: any) => {
       const meta = sourceMeta[result.source_id] || { audioName: null, projectName: null }
       return {
         chunk_id: result.segment_id,
