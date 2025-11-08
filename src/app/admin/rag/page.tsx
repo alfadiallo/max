@@ -174,13 +174,12 @@ export default async function RAGDashboardPage() {
       job.source_id ||
       '—'
 
-    const subtitleParts: string[] = []
-    if (projectName) subtitleParts.push(projectName)
-    if (audioName && audioName !== title) subtitleParts.push(audioName)
-
+    const versionLabel = job.version?.version_label || null
+    const subtitle =
+      versionLabel ? `Version: ${versionLabel}` : null
     return {
       title,
-      subtitle: subtitleParts.length > 0 ? subtitleParts.join(' • ') : null,
+      subtitle,
     }
   }
 
@@ -318,9 +317,7 @@ export default async function RAGDashboardPage() {
                           )
                         })()}
                       </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200 text-sm">
-                        {job.version?.version_label ?? '—'}
-                      </td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200 text-sm">{job.version?.version_label ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-700 dark:text-gray-200">
                         {new Date(job.submitted_at).toLocaleString()}
                       </td>
