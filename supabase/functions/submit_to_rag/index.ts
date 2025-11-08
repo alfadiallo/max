@@ -34,27 +34,42 @@ interface SubmitPayload {
   reviewerId: string;
 }
 
-interface ErrorResponse {
-  error: string;
-  details?: unknown;
-}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const jsonResponse = (body: unknown, init?: ResponseInit) =>
+  new Response(JSON.stringify(body), {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+      ...corsHeaders,
+    },
+  });
+
+const emptyResponse = (status = 200) =>
+  new Response(null, {
+    status,
+    headers: corsHeaders,
+  });
 
 serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return emptyResponse();
+  }
+
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" } satisfies ErrorResponse), {
-      status: 405,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: "Method not allowed" }, { status: 405 });
   }
 
   let payload: SubmitPayload;
   try {
     payload = await req.json();
   } catch (error) {
-    return new Response(JSON.stringify({ error: "Invalid JSON", details: error } satisfies ErrorResponse), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: "Invalid JSON", details: error }, { status: 400 });
   }
 
   const {
@@ -86,17 +101,11 @@ serve(async (req) => {
 
     if (fetchSourceError) {
       console.error("Failed to verify existing content source", fetchSourceError);
-      return new Response(JSON.stringify({ error: "Unable to verify content source", details: fetchSourceError } satisfies ErrorResponse), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Unable to verify content source", details: fetchSourceError }, { status: 500 });
     }
 
     if (existingSource && existingSource.transcription_status !== "human_verified" && existingSource.transcription_status !== "queued_for_rag") {
-      return new Response(JSON.stringify({ error: "Source must be human_verified before submitting to RAG" } satisfies ErrorResponse), {
-        status: 422,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Source must be human_verified before submitting to RAG" }, { status: 422 });
     }
   }
 
@@ -115,15 +124,9 @@ serve(async (req) => {
 
   if (versionInsertError) {
     console.error("rag_submit_transcript failed", versionInsertError);
-    return new Response(JSON.stringify({ error: "Failed to submit transcript to RAG", details: versionInsertError } satisfies ErrorResponse), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: "Failed to submit transcript to RAG", details: versionInsertError }, { status: 500 });
   }
 
-  return new Response(JSON.stringify({ ok: true, version }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  return jsonResponse({ ok: true, version });
 });
 
