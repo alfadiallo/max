@@ -40,7 +40,7 @@ export default async function RAGDashboardPage() {
   const [{ data: queueEntries }, queuedCount, processingCount, errorCount, completeCount, contentSegmentsCount, entitiesCount, relationshipsCount, queriesResult] = await Promise.all([
     supabase
       .from('rag_ingestion_queue')
-      .select<QueueEntry>('id, source_id, source_max_version_id, status, submitted_at, processed_at, result_summary, error_detail')
+      .select('id, source_id, source_max_version_id, status, submitted_at, processed_at, result_summary, error_detail')
       .order('submitted_at', { ascending: false })
       .limit(25),
     supabase.from('rag_ingestion_queue').select('*', { count: 'exact', head: true }).eq('status', 'queued'),
@@ -52,13 +52,13 @@ export default async function RAGDashboardPage() {
     supabase.from('kg_relationships').select('*', { count: 'exact', head: true }),
     supabase
       .from('user_queries')
-      .select<QueryEntry>('id, user_id, query_text, created_at, total_results')
+      .select('id, user_id, query_text, created_at, total_results, segments_returned')
       .order('created_at', { ascending: false })
       .limit(15),
   ])
 
-  const queue = queueEntries ?? []
-  const queries = queriesResult.data ?? []
+  const queue = (queueEntries ?? []) as QueueEntry[]
+  const queries = (queriesResult.data ?? []) as QueryEntry[]
 
   const segmentIds = Array.from(
     new Set(
