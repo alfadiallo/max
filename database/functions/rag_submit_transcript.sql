@@ -9,7 +9,8 @@ create or replace function rag_submit_transcript(
   p_source_title text default null,
   p_metadata jsonb default '{}'::jsonb,
   p_source_metadata jsonb default '{}'::jsonb,
-  p_submitted_at timestamptz default now()
+  p_submitted_at timestamptz default now(),
+  p_max_version_id uuid default null
 ) returns jsonb
 language plpgsql
 security definer
@@ -78,6 +79,7 @@ begin
     version_label,
     transcript_text,
     metadata_json,
+    max_version_id,
     reviewer_id,
     verified_at,
     is_latest
@@ -86,6 +88,7 @@ begin
     p_version_label,
     p_transcript_text,
     coalesce(p_metadata, '{}'::jsonb),
+    p_max_version_id,
     p_submitter_id,
     p_submitted_at,
     true
@@ -124,14 +127,16 @@ begin
   end if;
 
   insert into rag_ingestion_queue (
-    source_id := v_source_id,
+    source_id,
     version_id,
+    source_max_version_id,
     submitted_by,
     submitted_at,
     status
   ) values (
     v_source_id,
     v_version_id,
+    p_max_version_id,
     p_submitter_id,
     p_submitted_at,
     'queued'
@@ -140,6 +145,7 @@ begin
   return jsonb_build_object(
     'source_id', v_source_id,
     'version_id', v_version_id,
+    'max_version_id', p_max_version_id,
     'segments_created', greatest(v_segment_sequence - 1, 1)
   );
 end;

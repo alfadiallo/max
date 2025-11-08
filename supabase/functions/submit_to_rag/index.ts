@@ -80,6 +80,7 @@ serve(async (req) => {
     metadata = {},
     sourceMetadata = {},
     reviewerId,
+    maxVersionId,
   } = payload;
 
   if (!versionLabel || !transcriptText || !reviewerId) {
@@ -100,6 +101,7 @@ serve(async (req) => {
       p_source_metadata: sourceMetadata,
       p_submitter_id: reviewerId,
       p_submitted_at: now,
+      p_max_version_id: maxVersionId ?? null,
     });
 
   if (versionInsertError) {

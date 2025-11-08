@@ -13,6 +13,13 @@ const SUPABASE_FUNCTION_URL = (() => {
   return fnBase.endsWith('/') ? `${fnBase}submit_to_rag` : `${fnBase}/submit_to_rag`
 })()
 
+const RAG_STATUS_LABEL: Record<string, { label: string; className: string }> = {
+  queued: { label: 'Queued for RAG', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  processing: { label: 'Processing…', className: 'bg-blue-100 text-blue-700 border-blue-200' },
+  complete: { label: 'Indexed', className: 'bg-green-100 text-green-700 border-green-200' },
+  error: { label: 'Failed', className: 'bg-red-100 text-red-700 border-red-200' },
+}
+
 interface Transcription {
   id: string
   raw_text: string
@@ -51,6 +58,7 @@ interface Transcription {
         text_length?: number
       }
     }
+    rag_status?: RAGStatus | null
   }>
   json_with_timestamps?: {
     segments?: Array<{
@@ -71,6 +79,7 @@ interface Transcription {
       text_length?: number
     }
   }
+  rag_source_status?: RAGStatus | null
 }
 
 interface TranscriptionViewProps {
@@ -92,6 +101,14 @@ interface FinalVersionDetails {
     text: string
   }>
   metadata?: Record<string, unknown> | null
+  ragStatus?: RAGStatus | null
+}
+
+interface RAGStatus {
+  status: 'queued' | 'processing' | 'complete' | 'error'
+  submitted_at: string
+  processed_at?: string | null
+  result_summary?: Record<string, unknown> | null
 }
 
 export default function TranscriptionView({ audioFileId, audioDuration, audioFileName, projectId, projectName }: TranscriptionViewProps) {
@@ -116,6 +133,20 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
   const [activeTab, setActiveTab] = useState<'original' | 'edits' | 'text-translations' | 'speech-translations' | 'final' | 'analysis' | 'translations'>('original')
   const supabase = createClient()
   
+  const renderRagStatusChip = (status?: RAGStatus | null) => {
+    if (!status) return null
+    const config = RAG_STATUS_LABEL[status.status] ?? RAG_STATUS_LABEL['queued']
+    const processedLabel =
+      status.status === 'complete' && status.processed_at
+        ? ` • ${new Date(status.processed_at).toLocaleDateString()}`
+        : ''
+    return (
+      <span className={`inline-flex items-center px-2 py-1 text-[11px] font-medium border rounded-full ${config.className}`}>
+        {config.label}{processedLabel}
+      </span>
+    )
+  }
+
   // Check if user is Editor (restricted access)
   const isEditor = user?.user_metadata?.role === 'Editor' || user?.user_metadata?.role === 'editor'
   const [finalVersion, setFinalVersion] = useState<string | null>(null) // ID of the promoted final version
@@ -564,6 +595,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
             segments: finalData.segments,
           },
           reviewerId: session.user.id,
+          maxVersionId: finalData.id,
         }),
       })
       const result = await response.json()
@@ -1317,6 +1349,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                     
                     // Build all versions array: H versions in reverse chronological order, then T-1 at bottom
                     const hVersions = (transcription.versions || [])
+                      .filter((v) => v.version_type?.toUpperCase().startsWith('H'))
                       .sort((a, b) => a.version_number - b.version_number) // Sort ascending
                       .map((v) => ({
                         id: v.id,
@@ -1328,7 +1361,8 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                         metadata: metadata,
                         corrections_applied: v.dictionary_corrections_applied || [], // Store edit data
                         isLatest: false,
-                        canEdit: false
+                        canEdit: false,
+                        ragStatus: v.rag_status || null,
                       }))
                       .reverse() // Reverse so latest appears first
                     
@@ -1353,7 +1387,8 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                         metadata: metadata,
                         corrections_applied: [], // T-1 has no edits (it's the original)
                         isLatest: hVersions.length === 0, // T-1 is "latest" if no H-versions exist
-                        canEdit: canEditT1 // Allow editing T-1 to create first H-version
+                        canEdit: canEditT1, // Allow editing T-1 to create first H-version
+                        ragStatus: transcription.rag_source_status || null,
                       }
                     ]
                     
@@ -1400,9 +1435,12 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                                     <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(version.created_at).toLocaleString()}</p>
                                   </div>
                                 </div>
-                                {!versionIsEditing && hasTimestamps && (
-                                  <span className="text-xs text-green-600 font-medium dark:text-green-400">🎬 Has timestamps</span>
-                                )}
+                                <div className="flex items-center gap-2">
+                                  {renderRagStatusChip(version.ragStatus)}
+                                  {!versionIsEditing && hasTimestamps && (
+                                    <span className="text-xs text-green-600 font-medium dark:text-green-400">🎬 Has timestamps</span>
+                                  )}
+                                </div>
                               </button>
                               
                               {/* Version Content - Collapsed */}
@@ -1684,7 +1722,8 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                     type: transcription.transcription_type,
                     text: transcription.raw_text,
                     segments: transcription.json_with_timestamps?.segments || [],
-                    metadata: transcription.json_with_timestamps?.metadata
+                    metadata: transcription.json_with_timestamps?.metadata,
+                    ragStatus: transcription.rag_source_status || null,
                   }
                 } else if (transcription.versions?.some(v => v.id === finalVersion)) {
                   // Final is a version
@@ -1695,7 +1734,8 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                     type: version.version_type,
                     text: version.edited_text,
                     segments: version.json_with_timestamps?.segments || [],
-                    metadata: transcription.json_with_timestamps?.metadata
+                    metadata: transcription.json_with_timestamps?.metadata,
+                    ragStatus: version.rag_status || null,
                   }
                 }
                 
@@ -1704,7 +1744,10 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                 return (
                   <div key={transcription.id} className="bg-white p-4 rounded border border-green-300 dark:bg-gray-800 dark:border-green-700">
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-green-700 dark:text-green-400">✓ {finalVersionObj.type} - Final Version</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-green-700 dark:text-green-400">✓ {finalVersionObj.type} - Final Version</h3>
+                        {renderRagStatusChip(finalVersionObj.ragStatus)}
+                      </div>
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleAnalyze(transcription.id)}
@@ -1921,7 +1964,8 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                           type: transcription.transcription_type,
                           text: transcription.raw_text,
                           segments: transcription.json_with_timestamps?.segments || [],
-                          metadata: transcription.json_with_timestamps?.metadata
+                          metadata: transcription.json_with_timestamps?.metadata,
+                          ragStatus: transcription.rag_source_status || null,
                         }
                       } else if (finalVersion && transcription.versions?.some(v => v.id === finalVersion)) {
                         const version = transcription.versions.find(v => v.id === finalVersion)
@@ -1931,7 +1975,8 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                           type: version.version_type,
                           text: version.edited_text,
                           segments: version.json_with_timestamps?.segments || [],
-                          metadata: transcription.json_with_timestamps?.metadata
+                          metadata: transcription.json_with_timestamps?.metadata,
+                          ragStatus: version.rag_status || null,
                         }
                       }
                       
@@ -1939,6 +1984,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                       
                       return (
                         <div key={transcription.id} className="space-y-3">
+                          {renderRagStatusChip(finalVersionObj.ragStatus)}
                           {/* Dubbing Script Format */}
                           {finalVersionObj.segments.length > 0 && (
                             <div>

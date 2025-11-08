@@ -6,15 +6,14 @@ import React from 'react'
 
 interface RAGResult {
   chunk_id: string
-  insight_transcript_id: string
+  source_id: string | null
+  version_id: string | null
   chunk_text: string
-  start_timestamp: string
-  end_timestamp: string
-  segment_markers: string[]
+  start_timestamp: string | null
+  end_timestamp: string | null
   distance: number
-  chunk_number: number
-  audio_file_name?: string
-  project_name?: string
+  audio_file_name?: string | null
+  project_name?: string | null
 }
 
 export default function RAGSearchPage() {
@@ -228,7 +227,7 @@ export default function RAGSearchPage() {
                       </div>
                     </div>
                     <div className="text-sm text-gray-500">
-                      <span className="font-medium">{result.start_timestamp}</span> - <span>{result.end_timestamp}</span>
+                      <span className="font-medium">{result.start_timestamp ?? '—'}</span> - <span>{result.end_timestamp ?? '—'}</span>
                     </div>
                   </div>
 
@@ -256,27 +255,6 @@ export default function RAGSearchPage() {
                       </button>
                     )}
                   </div>
-
-                  {/* Segment Markers / Video Links */}
-                  {result.segment_markers && result.segment_markers.length > 0 && (
-                    <div className="border-t border-gray-200 pt-3 mb-3">
-                      <div className="flex flex-wrap gap-2">
-                        <span className="text-xs font-semibold text-gray-600">Video Segments:</span>
-                        {result.segment_markers.map((marker, idx) => (
-                          <button
-                            key={idx}
-                            className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition"
-                            onClick={() => {
-                              // TODO: Implement video player jump
-                              console.log('Jump to:', marker)
-                            }}
-                          >
-                            📹 {marker}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
 
                   {/* Source Info */}
                   {(result.audio_file_name || result.project_name) && (

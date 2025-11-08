@@ -38,6 +38,9 @@ export async function GET(req: NextRequest) {
     const transcriptionIds = transcriptions?.map(t => t.id) || []
     
     let versionsByTranscription: Record<string, any[]> = {}
+    let ragStatusByVersion: Record<string, any> = {}
+    let sourceStatusByTranscription: Record<string, any> = {}
+
     if (transcriptionIds.length > 0) {
       const { data: versions, error: versionsError } = await supabase
         .from('max_transcription_versions')
@@ -54,13 +57,51 @@ export async function GET(req: NextRequest) {
           }
           versionsByTranscription[version.transcription_id].push(version)
         })
+
+        const versionIds = versions?.map(v => v.id).filter(Boolean)
+        if (versionIds && versionIds.length > 0) {
+          const { data: ragJobs, error: ragError } = await supabase
+            .from('rag_ingestion_queue')
+            .select('id, version_id, source_max_version_id, status, submitted_at, processed_at, result_summary')
+            .in('source_max_version_id', versionIds)
+            .order('submitted_at', { ascending: false })
+
+          if (ragError) {
+            console.error('Error fetching rag queue status:', ragError)
+          } else {
+            ragJobs?.forEach(job => {
+              const key = job.source_max_version_id || job.version_id
+              if (!key) return
+              if (!ragStatusByVersion[key]) {
+                ragStatusByVersion[key] = job
+              }
+            })
+          }
+        }
+      }
+
+      const { data: sources, error: sourcesError } = await supabase
+        .from('content_sources')
+        .select('id, transcription_status, rag_last_submitted_at, rag_processed_version_id')
+        .in('id', transcriptionIds)
+
+      if (sourcesError) {
+        console.error('Error fetching content source status:', sourcesError)
+      } else {
+        sources?.forEach(source => {
+          sourceStatusByTranscription[source.id] = source
+        })
       }
     }
 
     // Attach versions to each transcription
     const transcriptionsWithVersions = transcriptions?.map(transcription => ({
       ...transcription,
-      versions: versionsByTranscription[transcription.id] || []
+      versions: (versionsByTranscription[transcription.id] || []).map(version => ({
+        ...version,
+        rag_status: ragStatusByVersion[version.id] || null,
+      })),
+      rag_source_status: sourceStatusByTranscription[transcription.id] || null,
     })) || []
 
     return NextResponse.json({

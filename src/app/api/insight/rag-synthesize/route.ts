@@ -14,63 +14,60 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient()
-    
-    // Get user for auth
-    const { data: { user } } = await supabase.auth.getUser()
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) {
       return Response.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Fetch chunks
-    const { data: chunks, error: chunksError } = await supabase
-      .from('insight_chunks')
-      .select('*')
+    const { data: segments, error: chunksError } = await supabase
+      .from('content_segments')
+      .select('id, segment_text, start_timestamp, end_timestamp')
       .in('id', chunk_ids)
 
     if (chunksError) {
       return Response.json({ success: false, error: chunksError.message }, { status: 500 })
     }
 
-    if (!chunks || chunks.length === 0) {
-      return Response.json({ success: false, error: 'No chunks found' }, { status: 404 })
+    if (!segments || segments.length === 0) {
+      return Response.json({ success: false, error: 'No segments found' }, { status: 404 })
     }
 
-    // Format chunks for Claude
-    const contextText = chunks.map((chunk: any, idx: number) => {
-      const markers = chunk.segment_markers && Array.isArray(chunk.segment_markers) 
-        ? chunk.segment_markers.join(', ') 
-        : chunk.timestamp_start
-      
-      return `[Chunk ${idx + 1}, ${chunk.timestamp_start}-${chunk.timestamp_end}, markers: ${markers}]:\n${chunk.text}`
-    }).join('\n\n')
+    const contextText = segments
+      .map((segment: any, idx: number) => {
+        const start = segment.start_timestamp ?? 'unknown'
+        const end = segment.end_timestamp ?? 'unknown'
+        return `[Chunk ${idx + 1}, ${start}-${end}]:\n${segment.segment_text}`
+      })
+      .join('\n\n')
 
-    // Call Claude
     const anthropic = new Anthropic()
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: `Based on these transcript excerpts, answer the following question:\n\n${query}\n\nContext:\n${contextText}\n\nProvide a clear answer with timestamp references where relevant.`
-      }]
+      messages: [
+        {
+          role: 'user',
+          content: `Based on these transcript excerpts, answer the following question:\n\n${query}\n\nContext:\n${contextText}\n\nProvide a clear answer with timestamp references where relevant.`,
+        },
+      ],
     })
 
     return Response.json({
       success: true,
       data: {
         answer: message.content[0].type === 'text' ? message.content[0].text : '',
-        sources: chunks.map((c: any) => ({
-          chunk_id: c.id,
-          timestamp_start: c.timestamp_start,
-          timestamp_end: c.timestamp_end,
-          segment_markers: c.segment_markers
-        }))
-      }
+        sources: segments.map((segment: any) => ({
+          chunk_id: segment.id,
+          timestamp_start: segment.start_timestamp,
+          timestamp_end: segment.end_timestamp,
+        })),
+      },
     })
-
   } catch (error: any) {
     console.error('RAG synthesis error:', error)
     return Response.json({ success: false, error: error.message }, { status: 500 })
   }
 }
-

@@ -10,84 +10,91 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient()
-    
-    // Get user for auth
-    const { data: { user } } = await supabase.auth.getUser()
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
     if (!user) {
       return Response.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Generate embedding for query using OpenAI
     const openai = new OpenAI()
     const response = await openai.embeddings.create({
       model: 'text-embedding-3-small',
-      input: query
+      input: query,
     })
 
     const queryEmbedding = response.data[0].embedding
 
-    // Search using the database function
-    const { data: results, error } = await supabase.rpc('search_insight_chunks', {
+    const { data: results, error } = await supabase.rpc('match_rag_content', {
       p_query_embedding: queryEmbedding,
       p_limit: limit,
-      p_distance_threshold: distance_threshold
+      p_distance_threshold: distance_threshold,
     })
 
     if (error) {
-      console.error('Search error:', error)
+      console.error('match_rag_content error:', error)
       return Response.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    // Enrich results with transcript, audio, and project info
-    const enrichedResults = await Promise.all((results || []).map(async (result: any) => {
-      // Get transcript info
-      const { data: transcript } = await supabase
-        .from('insight_transcripts')
-        .select('transcription_id')
-        .eq('id', result.insight_transcript_id)
-        .single()
+    const sourceIds = Array.from(new Set((results || []).map((r: any) => r.source_id).filter(Boolean)))
+    const sourceMeta: Record<string, { audioName: string | null; projectName: string | null }> = {}
 
-      let audioFileName = null
-      let projectName = null
+    if (sourceIds.length > 0) {
+      const { data: sources } = await supabase
+        .from('max_transcriptions')
+        .select(
+          `
+          id,
+          audio:max_audio_files(
+            file_name,
+            display_name,
+            project:max_projects(name)
+          )
+        `,
+        )
+        .in('id', sourceIds)
 
-      if (transcript) {
-        // Get audio file info through max_transcriptions
-        const { data: transcription } = await supabase
-          .from('max_transcriptions')
-          .select(`
-            audio_file_id,
-            audio:max_audio_files(
-              file_name,
-              display_name,
-              project:max_projects(name)
-            )
-          `)
-          .eq('id', transcript.transcription_id)
-          .single()
-
-        if (transcription?.audio) {
-          const audio: any = Array.isArray(transcription.audio) ? transcription.audio[0] : transcription.audio
-          const project: any = Array.isArray(audio?.project) ? audio?.project[0] : audio?.project
-          audioFileName = audio?.display_name || audio?.file_name
-          projectName = project?.name || null
+      sources?.forEach((item: any) => {
+        const audio = Array.isArray(item.audio) ? item.audio[0] : item.audio
+        const project = audio && Array.isArray(audio.project) ? audio.project[0] : audio?.project
+        sourceMeta[item.id] = {
+          audioName: audio?.display_name || audio?.file_name || null,
+          projectName: project?.name || null,
         }
-      }
+      })
+    }
 
+    const enrichedResults = (results || []).map((result: any) => {
+      const meta = sourceMeta[result.source_id] || { audioName: null, projectName: null }
       return {
-        ...result,
-        audio_file_name: audioFileName,
-        project_name: projectName
+        chunk_id: result.segment_id,
+        source_id: result.source_id,
+        version_id: result.version_id,
+        chunk_text: result.segment_text,
+        start_timestamp: result.start_timestamp,
+        end_timestamp: result.end_timestamp,
+        distance: result.distance,
+        audio_file_name: meta.audioName,
+        project_name: meta.projectName,
       }
-    }))
+    })
+
+    await supabase.from('user_queries').insert({
+      user_id: user.id,
+      query_text: query,
+      query_embedding: queryEmbedding,
+      total_results: enrichedResults.length,
+      segments_returned: enrichedResults.map((res) => res.chunk_id),
+    })
 
     return Response.json({
       success: true,
-      data: enrichedResults
+      data: enrichedResults,
     })
-
   } catch (error: any) {
     console.error('RAG search error:', error)
     return Response.json({ success: false, error: error.message }, { status: 500 })
   }
 }
-
