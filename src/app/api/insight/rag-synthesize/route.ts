@@ -24,7 +24,25 @@ export async function POST(request: Request) {
 
     const { data: segments, error: chunksError } = await supabase
       .from('content_segments')
-      .select('id, segment_text, start_timestamp, end_timestamp')
+      .select(
+        `
+        id,
+        source_id,
+        version_id,
+        segment_text,
+        start_timestamp,
+        end_timestamp,
+        sequence_number,
+        created_at,
+        content_sources (
+          title,
+          metadata
+        ),
+        transcript_versions (
+          version_label
+        )
+      `,
+      )
       .in('id', chunk_ids)
 
     if (chunksError) {
@@ -63,6 +81,12 @@ export async function POST(request: Request) {
           chunk_id: segment.id,
           timestamp_start: segment.start_timestamp,
           timestamp_end: segment.end_timestamp,
+          source_id: segment.source_id,
+          version_id: segment.version_id,
+          version_label: segment.transcript_versions?.version_label ?? null,
+          sequence_number: segment.sequence_number,
+          title: segment.content_sources?.title ?? null,
+          metadata: segment.content_sources?.metadata ?? null,
         })),
       },
     })

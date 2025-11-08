@@ -73,9 +73,24 @@ export async function POST(request: Request) {
       segment_text: string
       start_timestamp: string | null
       end_timestamp: string | null
+      created_at: string | null
       distance: number
       audio_file_name: string | null
       project_name: string | null
+      relevance_scores: {
+        dentist?: number | null
+        dental_assistant?: number | null
+        hygienist?: number | null
+        treatment_coordinator?: number | null
+        align_rep?: number | null
+      }
+      content_metadata: {
+        content_type?: string | null
+        clinical_complexity?: string | null
+        primary_focus?: string | null
+        topics?: string[] | null
+        confidence_score?: number | null
+      }
     }
 
     const enrichedResults: EnrichedResult[] = (results || []).map((result: any) => {
@@ -87,23 +102,43 @@ export async function POST(request: Request) {
         chunk_text: result.segment_text,
         start_timestamp: result.start_timestamp,
         end_timestamp: result.end_timestamp,
+        created_at: result.created_at,
         distance: result.distance,
         audio_file_name: meta.audioName,
         project_name: meta.projectName,
+        relevance_scores: {
+          dentist: result.relevance_dentist ?? null,
+          dental_assistant: result.relevance_dental_assistant ?? null,
+          hygienist: result.relevance_hygienist ?? null,
+          treatment_coordinator: result.relevance_treatment_coordinator ?? null,
+          align_rep: result.relevance_align_rep ?? null,
+        },
+        content_metadata: {
+          content_type: result.content_type ?? null,
+          clinical_complexity: result.clinical_complexity ?? null,
+          primary_focus: result.primary_focus ?? null,
+          topics: result.topics ?? [],
+          confidence_score: result.confidence_score ?? null,
+        },
       }
     })
 
-    await supabase.from('user_queries').insert({
-      user_id: user.id,
-      query_text: query,
-      query_embedding: queryEmbedding,
-      total_results: enrichedResults.length,
-      segments_returned: enrichedResults.map((res) => res.chunk_id),
-    })
+    const { data: queryRecord } = await supabase
+      .from('user_queries')
+      .insert({
+        user_id: user.id,
+        query_text: query,
+        query_embedding: queryEmbedding,
+        total_results: enrichedResults.length,
+        segments_returned: enrichedResults.map((res) => res.chunk_id),
+      })
+      .select('id')
+      .maybeSingle()
 
     return Response.json({
       success: true,
       data: enrichedResults,
+      query_id: queryRecord?.id ?? null,
     })
   } catch (error: any) {
     console.error('RAG search error:', error)

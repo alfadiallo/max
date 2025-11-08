@@ -15,6 +15,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const BATCH_SIZE = Number(Deno.env.get("RAG_WORKER_BATCH") ?? "5");
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
+const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+const ANTHROPIC_MODEL = Deno.env.get("RAG_CLAUDE_MODEL") ?? "claude-3-5-sonnet-20241022";
+const SLACK_WEBHOOK_URL = Deno.env.get("SLACK_WEBHOOK_URL") ?? "";
+const QUEUE_ALERT_THRESHOLD = Number(Deno.env.get("RAG_ALERT_QUEUE_THRESHOLD") ?? "25");
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error("Supabase env vars missing. process_rag_queue will exit.");
@@ -24,6 +28,179 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+const anthropicEnabled = Boolean(ANTHROPIC_API_KEY);
+
+type RelevanceScores = {
+  dentist?: number | null;
+  dental_assistant?: number | null;
+  hygienist?: number | null;
+  treatment_coordinator?: number | null;
+  align_rep?: number | null;
+};
+
+type EntityDescriptor = {
+  canonical_name: string;
+  entity_type: string;
+  aliases?: string[];
+  definition?: string | null;
+  mention_type?: string | null;
+  relevance_score?: number | null;
+  confidence?: number | null;
+};
+
+type RelationshipDescriptor = {
+  source: { canonical_name: string; entity_type: string };
+  target: { canonical_name: string; entity_type: string };
+  relationship_type: string;
+  strength?: number | null;
+  confidence?: number | null;
+  context?: string | null;
+};
+
+type SegmentAnalysis = {
+  relevance: RelevanceScores;
+  content_type?: string | null;
+  clinical_complexity?: string | null;
+  primary_focus?: string | null;
+  topics?: string[];
+  confidence_score?: number | null;
+  entities?: EntityDescriptor[];
+  relationships?: RelationshipDescriptor[];
+};
+async function sendSlackAlert(message: string, details?: Record<string, unknown>) {
+  if (!SLACK_WEBHOOK_URL) return;
+  try {
+    const payload: Record<string, unknown> = { text: message };
+    if (details) {
+      payload.blocks = [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: message,
+          },
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "```" + JSON.stringify(details, null, 2) + "```",
+          },
+        },
+      ];
+    }
+    await fetch(SLACK_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    console.error("Failed to send Slack alert", error);
+  }
+}
+
+async function analyzeSegmentWithClaude(segmentText: string, metadata: { sequence: number; total: number; projectName?: string | null; audioName?: string | null }): Promise<SegmentAnalysis | null> {
+  if (!anthropicEnabled) return null;
+
+  const prompt = `
+You support a dental education retrieval system. Analyze the given transcript segment and respond with strict JSON.
+
+Return an object with:
+- relevance: scores 0-100 for dentist, dental_assistant, hygienist, treatment_coordinator, align_rep.
+- content_type: one of ["procedure","philosophy","case_study","troubleshooting","patient_communication","team_coordination","other"].
+- clinical_complexity: one of ["beginner","intermediate","advanced"].
+- primary_focus: short phrase for main topic.
+- topics: array of 2-5 keywords.
+- confidence_score: 0-1 numeric value.
+- entities: array of objects {canonical_name, entity_type, aliases[], definition, mention_type, relevance_score, confidence}. Use entity_type from [procedure, concept, anatomy, material, tool, key_elements_term].
+- relationships: array of objects {source:{canonical_name,entity_type}, target:{canonical_name,entity_type}, relationship_type, strength, confidence, context}. relationship_type from [PREREQUISITE_OF, RELATED_TO, USED_IN, PART_OF, AFFECTS, CONTRASTS_WITH, DEMONSTRATES, EXPLAINS].
+
+If data is unavailable return empty arrays and nulls. Do not include commentary.
+
+Segment (sequence ${metadata.sequence}/${metadata.total}):
+"""${segmentText}"""
+`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 800,
+        temperature: 0.2,
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Claude API error", errorText);
+      await sendSlackAlert(":warning: RAG worker failed to call Claude", {
+        status: response.status,
+        payload: errorText,
+      });
+      return null;
+    }
+
+    const json = await response.json();
+    const text = json?.content?.[0]?.text ?? "";
+    if (!text) return null;
+    const cleaned = text.trim().replace(/^```json/i, "").replace(/```$/, "").trim();
+    const parsed = JSON.parse(cleaned);
+
+    const analysis: SegmentAnalysis = {
+      relevance: {
+        dentist: parsed?.relevance?.dentist ?? null,
+        dental_assistant: parsed?.relevance?.dental_assistant ?? null,
+        hygienist: parsed?.relevance?.hygienist ?? null,
+        treatment_coordinator: parsed?.relevance?.treatment_coordinator ?? null,
+        align_rep: parsed?.relevance?.align_rep ?? null,
+      },
+      content_type: parsed?.content_type ?? null,
+      clinical_complexity: parsed?.clinical_complexity ?? null,
+      primary_focus: parsed?.primary_focus ?? null,
+      topics: Array.isArray(parsed?.topics) ? parsed.topics : [],
+      confidence_score: parsed?.confidence_score ?? null,
+      entities: Array.isArray(parsed?.entities) ? parsed.entities : [],
+      relationships: Array.isArray(parsed?.relationships) ? parsed.relationships : [],
+    };
+
+    return analysis;
+  } catch (error) {
+    console.error("Failed to analyze segment with Claude", error);
+    await sendSlackAlert(":warning: Claude analysis failed for a segment", {
+      error: formatErrorDetail(error),
+    });
+    return null;
+  }
+}
+
+function normalizeScore(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.min(100, value));
+  }
+  return null;
+}
+
+function normalizeTopics(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter((item) => item.length > 0)
+      .slice(0, 8);
+  }
+  return [];
+}
 
 function formatErrorDetail(error: unknown): string | null {
   if (!error) return null;
@@ -69,6 +246,18 @@ serve(async (req) => {
   const startedAt = performance.now();
   const jobResults: any[] = [];
 
+  const { count: queuedCount } = await supabase
+    .from("rag_ingestion_queue")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "queued");
+
+  if ((queuedCount ?? 0) > QUEUE_ALERT_THRESHOLD) {
+    await sendSlackAlert(":warning: RAG queue backlog warning", {
+      queued: queuedCount,
+      threshold: QUEUE_ALERT_THRESHOLD,
+    });
+  }
+
   const { data: jobs, error: fetchError } = await supabase
     .from("rag_ingestion_queue")
     .select("id, source_id, version_id, submitted_by, submitted_at")
@@ -90,6 +279,8 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+
+  const entityCache = new Map<string, string>();
 
   for (const job of jobs) {
     const jobStart = performance.now();
@@ -218,28 +409,140 @@ serve(async (req) => {
         continue;
       }
 
-      const relevancePayload = insertedSegments.map((segment, idx) => ({
-        segment_id: segment.id,
-        relevance_dentist: 0,
-        relevance_dental_assistant: 0,
-        relevance_hygienist: 0,
-        relevance_treatment_coordinator: 0,
-        relevance_align_rep: 0,
-        content_type: null,
-        clinical_complexity: null,
-        primary_focus: null,
-        topics: [],
-        confidence_score: null,
-      }));
+      let entitiesLinked = 0;
+      let relationshipsLinked = 0;
 
-      await supabase
-        .from("segment_relevance")
-        .upsert(relevancePayload, { onConflict: "segment_id" });
+      for (let idx = 0; idx < insertedSegments.length; idx++) {
+        const inserted = insertedSegments[idx];
+        const segment = segments.find((seg) => seg.sequence_number === inserted.sequence_number);
 
-      console.log("process_rag_queue: upserted segment relevance", {
-        jobId: job.id,
-        relevanceRows: relevancePayload.length,
-      });
+        if (!segment) {
+          console.warn("process_rag_queue: missing segment text", inserted);
+          continue;
+        }
+
+        let analysis: SegmentAnalysis | null = null;
+        if (anthropicEnabled) {
+          analysis = await analyzeSegmentWithClaude(segment.text, {
+            sequence: segment.sequence_number,
+            total: segments.length,
+          });
+        }
+
+        const relevance = analysis?.relevance ?? {};
+
+        await supabase
+          .from("segment_relevance")
+          .upsert(
+            {
+              segment_id: inserted.id,
+              relevance_dentist: normalizeScore(relevance.dentist),
+              relevance_dental_assistant: normalizeScore(relevance.dental_assistant),
+              relevance_hygienist: normalizeScore(relevance.hygienist),
+              relevance_treatment_coordinator: normalizeScore(relevance.treatment_coordinator),
+              relevance_align_rep: normalizeScore(relevance.align_rep),
+              content_type: analysis?.content_type ?? null,
+              clinical_complexity: analysis?.clinical_complexity ?? null,
+              primary_focus: analysis?.primary_focus ?? null,
+              topics: normalizeTopics(analysis?.topics),
+              confidence_score: analysis?.confidence_score ?? null,
+            },
+            { onConflict: "segment_id" },
+          );
+
+        if (analysis?.entities && analysis.entities.length > 0) {
+          for (const entity of analysis.entities) {
+            if (!entity.canonical_name || !entity.entity_type) continue;
+            const key = `${entity.entity_type.toLowerCase()}::${entity.canonical_name.toLowerCase()}`;
+
+            let entityId = entityCache.get(key) ?? null;
+            if (!entityId) {
+              const { data: entityRow, error: entityError } = await supabase
+                .from("kg_entities")
+                .upsert(
+                  {
+                    entity_type: entity.entity_type,
+                    canonical_name: entity.canonical_name,
+                    aliases: Array.isArray(entity.aliases) ? entity.aliases : [],
+                    definition: entity.definition ?? null,
+                    metadata: {
+                      source: "process_rag_queue",
+                    },
+                  },
+                  { onConflict: "entity_type,canonical_name" },
+                )
+                .select("id")
+                .maybeSingle();
+
+              if (entityError) {
+                console.error("Failed to upsert entity", entityError);
+                continue;
+              }
+              entityId = entityRow?.id ?? null;
+              if (entityId) {
+                entityCache.set(key, entityId);
+              }
+            }
+
+            if (!entityId) continue;
+
+            const { error: segmentEntityError } = await supabase
+              .from("segment_entities")
+              .upsert(
+                {
+                  segment_id: inserted.id,
+                  entity_id: entityId,
+                  mention_type: entity.mention_type ?? null,
+                  relevance_score: typeof entity.relevance_score === "number" ? entity.relevance_score : null,
+                  extraction_confidence: typeof entity.confidence === "number" ? entity.confidence : null,
+                },
+                { onConflict: "segment_id,entity_id" },
+              );
+
+            if (segmentEntityError) {
+              console.error("Failed to link segment entity", segmentEntityError);
+            } else {
+              entitiesLinked += 1;
+            }
+          }
+        }
+
+        if (analysis?.relationships && analysis.relationships.length > 0) {
+          for (const rel of analysis.relationships) {
+            if (!rel.source?.canonical_name || !rel.target?.canonical_name) continue;
+            const sourceKey = `${rel.source.entity_type.toLowerCase()}::${rel.source.canonical_name.toLowerCase()}`;
+            const targetKey = `${rel.target.entity_type.toLowerCase()}::${rel.target.canonical_name.toLowerCase()}`;
+
+            const sourceId = entityCache.get(sourceKey);
+            const targetId = entityCache.get(targetKey);
+            if (!sourceId || !targetId) continue;
+
+            const { error: relationshipError } = await supabase
+              .from("kg_relationships")
+              .upsert(
+                {
+                  source_entity_id: sourceId,
+                  target_entity_id: targetId,
+                  relationship_type: rel.relationship_type ?? "RELATED_TO",
+                  strength: typeof rel.strength === "number" ? rel.strength : null,
+                  confidence: typeof rel.confidence === "number" ? rel.confidence : null,
+                  context: rel.context ?? null,
+                  source_segment_id: inserted.id,
+                  metadata: {
+                    source: "process_rag_queue",
+                  },
+                },
+                { onConflict: "source_entity_id,target_entity_id,relationship_type" },
+              );
+
+            if (relationshipError) {
+              console.error("Failed to upsert relationship", relationshipError);
+            } else {
+              relationshipsLinked += 1;
+            }
+          }
+        }
+      }
 
       await supabase
         .from("content_sources")
@@ -251,12 +554,13 @@ serve(async (req) => {
 
       const resultSummary = {
         segments_processed: insertedSegments.length,
-        entities_created: 0,
-        relationships_created: 0,
+        entities_linked: entitiesLinked,
+        relationships_linked: relationshipsLinked,
         duration_ms: Math.round(performance.now() - jobStart),
         processed_version_id: job.version_id,
         embedding_model: embeddingModel,
-        notes: "Placeholder pipeline executed. TODO: integrate Claude/Gemini + KG generation.",
+        claude_model: anthropicEnabled ? ANTHROPIC_MODEL : null,
+        notes: anthropicEnabled ? "Segment relevance, entities, and relationships generated." : "Segment embeddings generated without Claude analysis.",
       };
 
       await supabase
@@ -276,6 +580,10 @@ serve(async (req) => {
       });
     } catch (error) {
       console.error("process_rag_queue: job failed", job.id, error);
+      await sendSlackAlert(":x: RAG worker job failed", {
+        job_id: job.id,
+        error: formatErrorDetail(error),
+      });
       await supabase
         .from("rag_ingestion_queue")
         .update({ status: "error", error_detail: formatErrorDetail(error) })

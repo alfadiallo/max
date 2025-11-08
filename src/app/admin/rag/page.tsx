@@ -183,27 +183,29 @@ export default async function RAGDashboardPage() {
   const renderSummary = (job: QueueEntry) => {
     if (job.result_summary) {
       const summary = job.result_summary
-      const details: string[] = []
-      if (summary.segments_processed !== undefined) {
-        const count = summary.segments_processed
-        details.push(`${count} segment${count === 1 ? '' : 's'}`)
-      }
-      if (summary.duration_ms !== undefined) {
-        const duration = Math.round(summary.duration_ms)
-        details.push(`${duration} ms`)
-      }
-      if (summary.embedding_model) {
-        details.push(`Embedding: ${summary.embedding_model}`)
-      }
-
       return (
-        <div className="text-sm text-gray-700 dark:text-gray-300">
-          {summary.notes || 'Processed'}
-          {details.length > 0 && (
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {details.join(' • ')}
-            </div>
-          )}
+        <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
+          <div>{summary.notes || 'Processed'}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 flex flex-wrap gap-2">
+            {summary.segments_processed !== undefined && (
+              <span>{summary.segments_processed} segments</span>
+            )}
+            {summary.entities_linked !== undefined && (
+              <span>{summary.entities_linked} entities</span>
+            )}
+            {summary.relationships_linked !== undefined && (
+              <span>{summary.relationships_linked} relationships</span>
+            )}
+            {summary.duration_ms !== undefined && (
+              <span>{summary.duration_ms} ms</span>
+            )}
+            {summary.embedding_model && (
+              <span>Embedding: {summary.embedding_model}</span>
+            )}
+            {summary.claude_model && (
+              <span>Claude: {summary.claude_model}</span>
+            )}
+          </div>
         </div>
       )
     }
@@ -269,12 +271,13 @@ export default async function RAGDashboardPage() {
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Submitted</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Processed</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Summary</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {queue.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
                       No ingestion jobs yet.
                     </td>
                   </tr>
@@ -312,6 +315,33 @@ export default async function RAGDashboardPage() {
                       </td>
                       <td className="px-4 py-3">
                         {renderSummary(job)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 space-x-2">
+                        {job.status === 'error' && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const response = await fetch('/api/admin/rag/jobs/requeue', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ jobId: job.id }),
+                                })
+                                const result = await response.json()
+                                if (!response.ok || !result?.ok) {
+                                  alert(result?.error || 'Failed to requeue job')
+                                } else {
+                                  alert('Job requeued')
+                                  window.location.reload()
+                                }
+                              } catch (error: any) {
+                                alert(error.message)
+                              }
+                            }}
+                            className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                          >
+                            Retry
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))

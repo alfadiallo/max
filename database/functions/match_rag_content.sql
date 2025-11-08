@@ -14,7 +14,18 @@ returns table (
   sequence_number integer,
   start_timestamp interval,
   end_timestamp interval,
-  distance double precision
+  created_at timestamptz,
+  distance double precision,
+  relevance_dentist numeric,
+  relevance_dental_assistant numeric,
+  relevance_hygienist numeric,
+  relevance_treatment_coordinator numeric,
+  relevance_align_rep numeric,
+  content_type text,
+  clinical_complexity text,
+  primary_focus text,
+  topics text[],
+  confidence_score numeric
 ) as $$
   select
     cs.id as segment_id,
@@ -24,8 +35,20 @@ returns table (
     cs.sequence_number,
     cs.start_timestamp,
     cs.end_timestamp,
-    (cs.embedding <-> p_query_embedding) as distance
+    cs.created_at,
+    (cs.embedding <-> p_query_embedding) as distance,
+    sr.relevance_dentist,
+    sr.relevance_dental_assistant,
+    sr.relevance_hygienist,
+    sr.relevance_treatment_coordinator,
+    sr.relevance_align_rep,
+    sr.content_type,
+    sr.clinical_complexity,
+    sr.primary_focus,
+    sr.topics,
+    sr.confidence_score
   from content_segments cs
+  left join segment_relevance sr on sr.segment_id = cs.id
   where cs.embedding is not null
     and (cs.embedding <-> p_query_embedding) <= p_distance_threshold
   order by cs.embedding <-> p_query_embedding
