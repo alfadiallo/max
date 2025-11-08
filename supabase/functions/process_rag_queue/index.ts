@@ -32,6 +32,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const anthropicEnabled = Boolean(ANTHROPIC_API_KEY);
+console.log("process_rag_queue: anthropicEnabled", anthropicEnabled ? "enabled" : "disabled");
 
 function chunkTextForEmbedding(text: string, limit = EMBEDDING_CHUNK_CHAR_LIMIT): string[] {
   const cleaned = text?.trim();
