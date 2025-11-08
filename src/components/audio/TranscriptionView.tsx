@@ -1739,7 +1739,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                         <h4 className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-200">Dubbing Script Format (with timestamps)</h4>
                         <div className="bg-purple-50 border border-purple-200 rounded p-3 max-h-64 overflow-y-auto dark:bg-purple-900 dark:border-purple-700">
                           <pre className="whitespace-pre-wrap text-xs font-mono dark:text-gray-100">
-                            {finalVersionObj.segments.map(seg => `[${formatTime(seg.start)}-${formatTime(seg.end)}]\n${seg.text}\n`).join('\n')}
+                          {finalVersionObj.segments.map(seg => `[${formatTime(seg.start ?? 0)}-${formatTime(seg.end ?? 0)}]\n${seg.text}\n`).join('\n')}
                           </pre>
                         </div>
                       </div>
