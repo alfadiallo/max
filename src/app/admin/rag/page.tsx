@@ -6,7 +6,6 @@ import nextDynamic from 'next/dynamic'
 export const dynamic = 'force-dynamic'
 
 const RunWorkerButton = nextDynamic(() => import('./RunWorkerButton'), { ssr: false })
-const ResetRAGButton = nextDynamic(() => import('./ResetRAGButton'), { ssr: false })
 
 interface QueueEntry {
   id: string
@@ -242,7 +241,7 @@ export default async function RAGDashboardPage() {
               Monitor ingestion jobs, indexed content, and user search activity.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/projects"
               className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-700 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 dark:bg-gray-950 dark:text-blue-300 dark:border-blue-700"
@@ -256,7 +255,6 @@ export default async function RAGDashboardPage() {
               View Segments →
             </Link>
             <RunWorkerButton />
-            <ResetRAGButton />
           </div>
         </div>
 
@@ -280,7 +278,6 @@ export default async function RAGDashboardPage() {
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Status</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Source</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">H-Version</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Submitted</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Processed</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Summary</th>
@@ -290,7 +287,7 @@ export default async function RAGDashboardPage() {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {queue.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={6} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
                       No ingestion jobs yet.
                     </td>
                   </tr>
@@ -317,7 +314,6 @@ export default async function RAGDashboardPage() {
                           )
                         })()}
                       </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200 text-sm">{job.version?.version_label ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-700 dark:text-gray-200">
                         {new Date(job.submitted_at).toLocaleString()}
                       </td>
@@ -353,6 +349,31 @@ export default async function RAGDashboardPage() {
                             Retry
                           </button>
                         )}
+                        <button
+                          onClick={async () => {
+                            const confirmed = window.confirm('Delete this submission and all associated segments?')
+                            if (!confirmed) return
+                            try {
+                              const response = await fetch('/api/admin/rag/jobs/delete', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ jobId: job.id }),
+                              })
+                              const result = await response.json()
+                              if (!response.ok || !result?.ok) {
+                                alert(result?.error || 'Failed to delete submission')
+                              } else {
+                                alert('Submission deleted')
+                                window.location.reload()
+                              }
+                            } catch (error: any) {
+                              alert(error.message)
+                            }
+                          }}
+                          className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700"
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))
