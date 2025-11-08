@@ -1,8 +1,11 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import dynamic from 'next/dynamic'
 
 export const dynamic = 'force-dynamic'
+
+const RunWorkerButton = dynamic(() => import('./RunWorkerButton'), { ssr: false })
 
 interface QueueEntry {
   id: string
@@ -232,19 +235,28 @@ export default async function RAGDashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <main className="max-w-7xl mx-auto py-10 px-6 space-y-8">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Max RAG Dashboard</h1>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Monitor ingestion jobs, indexed content, and user search activity.
             </p>
           </div>
-          <Link
-            href="/projects"
-            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-700 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 dark:bg-gray-950 dark:text-blue-300 dark:border-blue-700"
-          >
-            ← Back to Projects
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/projects"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-700 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 dark:bg-gray-950 dark:text-blue-300 dark:border-blue-700"
+            >
+              ← Back to Projects
+            </Link>
+            <Link
+              href="/admin/rag/segments"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 border border-purple-200 rounded-lg bg-white hover:bg-purple-50 dark:bg-gray-950 dark:text-purple-300 dark:border-purple-700"
+            >
+              View Segments →
+            </Link>
+            <RunWorkerButton />
+          </div>
         </div>
 
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
