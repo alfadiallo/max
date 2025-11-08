@@ -60,23 +60,6 @@ const formatTimeInterval = (value: string | null) => {
 }
 
 const relevanceToBadges = (relevance: SegmentRelevance | null | undefined) => {
-const formatRelativeTime = (value: string | null | undefined) => {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-
-  const diffMs = Date.now() - date.getTime()
-  const diffSeconds = Math.round(diffMs / 1000)
-  const diffMinutes = Math.round(diffSeconds / 60)
-  const diffHours = Math.round(diffMinutes / 60)
-  const diffDays = Math.round(diffHours / 24)
-
-  if (Math.abs(diffSeconds) < 45) return `${diffSeconds}s ago`
-  if (Math.abs(diffMinutes) < 45) return `${diffMinutes}m ago`
-  if (Math.abs(diffHours) < 36) return `${diffHours}h ago`
-  return `${diffDays}d ago`
-}
-
   if (!relevance) return []
   const entries: Array<{ label: string; score: number }> = []
   const map: Record<string, string> = {
@@ -95,6 +78,23 @@ const formatRelativeTime = (value: string | null | undefined) => {
   return entries
 }
 
+const formatRelativeTime = (value: string | null | undefined) => {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  const diffMs = Date.now() - date.getTime()
+  const diffSeconds = Math.round(diffMs / 1000)
+  const diffMinutes = Math.round(diffSeconds / 60)
+  const diffHours = Math.round(diffMinutes / 60)
+  const diffDays = Math.round(diffHours / 24)
+
+  if (Math.abs(diffSeconds) < 45) return `${diffSeconds}s ago`
+  if (Math.abs(diffMinutes) < 45) return `${diffMinutes}m ago`
+  if (Math.abs(diffHours) < 36) return `${diffHours}h ago`
+  return `${diffDays}d ago`
+}
+
 export default function SegmentsTable() {
   const [segments, setSegments] = useState<SegmentRecord[]>([])
   const [pagination, setPagination] = useState<ApiResponse['pagination'] | null>(null)
@@ -105,42 +105,56 @@ export default function SegmentsTable() {
   const [search, setSearch] = useState('')
   const [sourceId, setSourceId] = useState('')
   const [versionId, setVersionId] = useState('')
+  const [appliedFilters, setAppliedFilters] = useState({
+    search: '',
+    sourceId: '',
+    versionId: '',
+  })
 
   const [selectedSegment, setSelectedSegment] = useState<SegmentRecord | null>(null)
 
-  const loadSegments = async () => {
-    setLoading(true)
-    setError(null)
-
-    const params = new URLSearchParams()
-    params.set('page', page.toString())
-    if (search.trim()) params.set('search', search.trim())
-    if (sourceId.trim()) params.set('sourceId', sourceId.trim())
-    if (versionId.trim()) params.set('versionId', versionId.trim())
-
-    try {
-      const response = await fetch(`/api/admin/rag/segments?${params.toString()}`, {
-        credentials: 'include',
-      })
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}))
-        throw new Error(payload.error || 'Failed to load segments')
-      }
-      const payload: ApiResponse = await response.json()
-      setSegments(payload.data)
-      setPagination(payload.pagination)
-    } catch (err: any) {
-      console.error('[segments-table] fetch failed', err)
-      setError(err.message ?? 'Failed to load segments')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    loadSegments()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page])
+    let cancelled = false
+
+    const fetchSegments = async () => {
+      setLoading(true)
+      setError(null)
+
+      const params = new URLSearchParams()
+      params.set('page', page.toString())
+      if (appliedFilters.search.trim()) params.set('search', appliedFilters.search.trim())
+      if (appliedFilters.sourceId.trim()) params.set('sourceId', appliedFilters.sourceId.trim())
+      if (appliedFilters.versionId.trim()) params.set('versionId', appliedFilters.versionId.trim())
+
+      try {
+        const response = await fetch(`/api/admin/rag/segments?${params.toString()}`, {
+          credentials: 'include',
+        })
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}))
+          throw new Error(payload.error || 'Failed to load segments')
+        }
+        const payload: ApiResponse = await response.json()
+        if (!cancelled) {
+          setSegments(payload.data)
+          setPagination(payload.pagination)
+        }
+      } catch (err: any) {
+        console.error('[segments-table] fetch failed', err)
+        if (!cancelled) {
+          setError(err.message ?? 'Failed to load segments')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    fetchSegments()
+
+    return () => {
+      cancelled = true
+    }
+  }, [page, appliedFilters])
 
   const projectAndAudio = (segment: SegmentRecord) => {
     const metadata = segment.content_sources?.metadata ?? {}
@@ -200,7 +214,11 @@ export default function SegmentsTable() {
           <button
             onClick={() => {
               setPage(1)
-              loadSegments()
+              setAppliedFilters({
+                search,
+                sourceId,
+                versionId,
+              })
             }}
             className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
             disabled={loading}
@@ -214,7 +232,7 @@ export default function SegmentsTable() {
                 setSourceId('')
                 setVersionId('')
                 setPage(1)
-                loadSegments()
+                setAppliedFilters({ search: '', sourceId: '', versionId: '' })
               }}
               className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:underline"
             >
