@@ -1,11 +1,11 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import dynamic from 'next/dynamic'
+import nextDynamic from 'next/dynamic'
 
 export const dynamic = 'force-dynamic'
 
-const RunWorkerButton = dynamic(() => import('./RunWorkerButton'), { ssr: false })
+const RunWorkerButton = nextDynamic(() => import('./RunWorkerButton'), { ssr: false })
 
 interface QueueEntry {
   id: string
