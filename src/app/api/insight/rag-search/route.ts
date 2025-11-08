@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       query_text: query,
       query_embedding: queryEmbedding,
       total_results: enrichedResults.length,
-      segments_returned: enrichedResults.map((res) => res.chunk_id),
+      segments_returned: enrichedResults.map((res: RAGResult) => res.chunk_id),
     })
 
     return Response.json({
