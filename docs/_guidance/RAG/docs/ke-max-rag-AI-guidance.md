@@ -278,8 +278,8 @@ Focus on clinically meaningful relationships. Avoid trivial connections.
 
 > The “Push to Max RAG” button enqueues work in `rag_ingestion_queue`. A background worker drains this queue and performs the full RAG pipeline so search remains fresh without manual steps.
 
-- ✅ **Status (2025-11-08):** Supabase Edge Function `process_rag_queue` deployed and verified against production database.
-- **Runtime:** Manual trigger via service-role function call today; cron schedule planned next.
+- ✅ **Status (2025-11-08):** Supabase Edge Function `process_rag_queue` deployed, scheduled via `pg_cron` every two minutes, and verified against production database.
+- **Runtime:** Invoked automatically through Postgres `pg_cron` (2‑minute cadence); manual service-role trigger remains available for spot runs.
 - **Prerequisites:** Database migrations `002_transcripts_rag.sql`, `003_rag_core.sql`, and `004_rag_version_links.sql` applied to Supabase to create `content_segments`, `segment_relevance`, graph tables, and version linkage.
 - **Locking:** Reads queued rows, marks each `processing`, processes sequentially (batch size 5) with optional `FOR UPDATE SKIP LOCKED` upgrade.
 - **Data load:** Fetch `transcript_versions`, `transcript_segments`, and `content_sources` metadata; resolves `max_transcriptions` for display names.

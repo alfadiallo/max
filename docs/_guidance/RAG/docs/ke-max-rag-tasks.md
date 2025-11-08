@@ -459,7 +459,7 @@ This document breaks down the Max RAG project into concrete, actionable tasks or
 - [x] Logs are helpful for debugging
 - [ ] Tests passing
 
-**Status (2025-11-08):** `process_rag_queue` Edge Function drains `rag_ingestion_queue`, generates embeddings, writes `content_segments` + `segment_relevance`; KG + Claude extraction still TODO.
+**Status (2025-11-08):** `process_rag_queue` Edge Function drains `rag_ingestion_queue`, generates embeddings, writes `content_segments` + `segment_relevance`; scheduled via `pg_cron` every 2 minutes. KG + Claude extraction still TODO.
 
 **File Location:** `/src/lib/jobs/process-transcript.ts` or Supabase Edge Function
 

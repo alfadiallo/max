@@ -11,6 +11,8 @@
 - Implemented background worker `process_rag_queue` with OpenAI embeddings plus core RAG schema (`69c2cc2`, `3c28ab2`).
 - Shipped new RAG search/synthesis API backed by `content_segments` + query logging; refreshed `/rag` UX.
 - Updated documentation (AI guidance, planning, PRD, tasks) and added migrations/functions `003_rag_core.sql`, `004_rag_version_links.sql`, `match_rag_content.sql`.
+- Applied RAG migrations on production Supabase, enhanced worker logging, resolved queue errors, set up `pg_cron` schedule (2 min cadence), and verified dashboard now displays zero failures (`66ad430`).
+- Grouped dashboard tiles into Content/Admin sections and surfaced direct link to `/admin/rag` (`2905b31`).
 
 **Outstanding / Next Up**
 - Integrate Claude-based relevance + entity extraction inside the worker.
@@ -24,4 +26,6 @@
 - `51187b8` feat: allow H versions to push directly to Max RAG
 - `69c2cc2` fix: add CORS preflight support to submit_to_rag
 - `3c28ab2` fix: allow submit_to_rag to upsert new sources
+- `2905b31` refactor: group dashboard tiles into content and admin
+- `16a790c` fix: stabilize rag worker and refresh docs
 

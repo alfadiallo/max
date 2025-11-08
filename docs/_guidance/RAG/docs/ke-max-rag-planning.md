@@ -4,7 +4,7 @@
 **Domain:** www.max.keyelements.co  
 **Planning Date:** 2025-11-07  
 **Target Launch:** Q1 2026  
-**Last Updated:** 2025-11-08 (worker + dashboard validated end-to-end)
+**Last Updated:** 2025-11-08 (worker + dashboard validated end-to-end; worker scheduling enabled)
 
 ---
 
@@ -70,7 +70,7 @@ Transform Dr. Karla Soto's 8+ hours of dental education video lectures into an i
 - ✅ End-user “Push to Max RAG” workflow now enqueues jobs via `submit_to_rag` (Edits + Final tabs).
 - ✅ Background worker (`process_rag_queue` edge function) processes queued transcripts, generates OpenAI embeddings, and writes segments/relevance records (production migrations `003_rag_core.sql`, `004_rag_version_links.sql` applied 2025-11-08).
 - ✅ Core storage tables deployed (`content_segments`, `segment_relevance`, `kg_entities`, `kg_relationships`, `segment_entities`, `user_queries`) and populated by first processed transcript.
-- ✅ Admin RAG dashboard (`/admin/rag`) surfaces queue metrics, processed content, and recent user queries.
+- ✅ Admin RAG dashboard (`/admin/rag`) surfaces queue metrics, processed content, and recent user queries; main dashboard now groups tiles into Content/Admin sections.
 - ✅ User RAG search UI (`/rag`) powered by the new `match_rag_content` RPC with query logging.
 - ⏳ Knowledge graph enrichment (entity + relationship creation) is stubbed; Phase 3 will integrate Claude extraction for KG writes.
 
@@ -78,7 +78,7 @@ Transform Dr. Karla Soto's 8+ hours of dental education video lectures into an i
 - Pushed sample H-1 transcript → queue row created (`status='queued'`) → worker completed after migrations with `segments_processed` summary, `content_segments` row, and `rag_ingestion_queue.status='complete'`.
 - `/rag` search for “alignment workflow” returns segments sourced from new pipeline; Claude synthesis generates answer using selected chunk IDs.
 - `/admin/rag` dashboard reflects queue item counts, indexed segment totals, and logs the above user query in `user_queries`.
-- Remaining to validate: knowledge-graph entity extraction, persona-specific relevance scoring, automated retry escalation, scheduled invocations (currently manual).
+- Remaining to validate: knowledge-graph entity extraction, persona-specific relevance scoring, automated retry escalation, alerting on scheduled runs.
 
 ---
 
