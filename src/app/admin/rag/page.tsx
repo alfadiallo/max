@@ -34,7 +34,8 @@ export default async function RAGDashboardPage() {
     redirect('/login')
   }
 
-  const isInternal = user.user_metadata?.role === 'internal' || user.user_metadata?.role === 'admin'
+  const userRole = (user.user_metadata?.role ?? '').toString().toLowerCase()
+  const isInternal = ['internal', 'admin', 'superadmin'].includes(userRole)
   if (!isInternal) {
     redirect('/dashboard')
   }
