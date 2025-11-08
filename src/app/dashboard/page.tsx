@@ -122,6 +122,12 @@ export default function DashboardPage() {
       variant: 'highlight',
     },
     {
+      href: '/admin/rag/segments',
+      title: 'RAG Segments',
+      description: 'Inspect indexed content segments and embeddings',
+      icon: FileSearch,
+    },
+    {
       href: '/admin/users',
       title: 'Manage Users',
       description: 'Invite and manage team members',
