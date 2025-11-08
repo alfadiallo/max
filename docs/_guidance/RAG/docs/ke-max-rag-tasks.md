@@ -3,7 +3,7 @@
 **Project:** Max RAG Knowledge Platform  
 **Domain:** www.max.keyelements.co  
 **Document Type:** Actionable Task Breakdown  
-**Last Updated:** 2025-11-07
+**Last Updated:** 2025-11-08
 
 ---
 
@@ -496,11 +496,10 @@ This document breaks down the Max RAG project into concrete, actionable tasks or
 - [ ] Error messages displayed clearly
 - [ ] Only admins can access
 
-**Status:** `/admin/rag` dashboard delivered with queue metrics and latest query activity.
+**Status (2025-11-08):** `/admin/rag` dashboard shipped; shows queue counts, processed content, graph placeholders, and recent queries. Retry action + real-time updates scheduled for follow-up.
 
 **File Locations:**
-- `/src/app/admin/processing/page.tsx`
-- `/src/components/admin/ProcessingTable.tsx`
+- `/src/app/admin/rag/page.tsx`
 
 ---
 

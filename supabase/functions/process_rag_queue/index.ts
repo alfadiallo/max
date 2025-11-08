@@ -25,6 +25,29 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 
+function formatErrorDetail(error: unknown): string | null {
+  if (!error) return null;
+  if (typeof error === "string") return error;
+  if (error instanceof Error) {
+    return JSON.stringify({
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
+  }
+  if (typeof error === "object") {
+    const errObj = error as Record<string, unknown>;
+    const payload = {
+      message: (errObj.message ?? errObj.error ?? "Unknown error") as string,
+      details: errObj.details ?? null,
+      hint: errObj.hint ?? null,
+      code: errObj.code ?? errObj.status ?? null,
+    };
+    return JSON.stringify(payload);
+  }
+  return String(error);
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -72,6 +95,12 @@ serve(async (req) => {
     const jobStart = performance.now();
 
     try {
+      console.log("process_rag_queue: picked job", {
+        jobId: job.id,
+        sourceId: job.source_id,
+        versionId: job.version_id,
+      });
+
       const { error: markProcessingError } = await supabase
         .from("rag_ingestion_queue")
         .update({ status: "processing", error_detail: null })
@@ -85,14 +114,14 @@ serve(async (req) => {
 
       const { data: version, error: versionError } = await supabase
         .from("transcript_versions")
-        .select("id, source_id, transcript_text, metadata_json, max_version_id")
+        .select("id, source_id, transcript_text, metadata_json")
         .eq("id", job.version_id)
         .maybeSingle();
 
       if (versionError || !version) {
         await supabase
           .from("rag_ingestion_queue")
-          .update({ status: "error", error_detail: JSON.stringify(versionError ?? "Version not found") })
+          .update({ status: "error", error_detail: formatErrorDetail(versionError ?? "Version not found") })
           .eq("id", job.id);
         continue;
       }
@@ -102,11 +131,16 @@ serve(async (req) => {
         .select("id, sequence_number, start_time, end_time, text")
         .eq("version_id", version.id)
         .order("sequence_number", { ascending: true });
+      console.log("process_rag_queue: fetched segments", {
+        jobId: job.id,
+        segmentCount: segments.length,
+      });
+
 
       if (segmentError || !segments || segments.length === 0) {
         await supabase
           .from("rag_ingestion_queue")
-          .update({ status: "error", error_detail: JSON.stringify(segmentError ?? "No transcript segments") })
+          .update({ status: "error", error_detail: formatErrorDetail(segmentError ?? "No transcript segments") })
           .eq("id", job.id);
         continue;
       }
@@ -129,10 +163,14 @@ serve(async (req) => {
         console.warn("process_rag_queue: OPENAI_API_KEY missing, skipping embedding generation");
       }
 
-      await supabase
+      const { error: deleteContentError } = await supabase
         .from("content_segments")
         .delete()
         .eq("version_id", version.id);
+
+      if (deleteContentError) {
+        console.error("process_rag_queue: failed to clear previous content segments", job.id, deleteContentError);
+      }
 
       const contentRows = segments.map((segment, idx) => ({
         source_id: version.source_id,
@@ -155,10 +193,15 @@ serve(async (req) => {
       if (contentError) {
         await supabase
           .from("rag_ingestion_queue")
-          .update({ status: "error", error_detail: JSON.stringify(contentError) })
+          .update({ status: "error", error_detail: formatErrorDetail(contentError) })
           .eq("id", job.id);
         continue;
       }
+
+      console.log("process_rag_queue: inserted content segments", {
+        jobId: job.id,
+        inserted: contentRows.length,
+      });
 
       // The insert needs segment IDs. Fetch inserted rows to align IDs.
       const { data: insertedSegments, error: fetchInsertedError } = await supabase
@@ -170,7 +213,7 @@ serve(async (req) => {
       if (fetchInsertedError || !insertedSegments) {
         await supabase
           .from("rag_ingestion_queue")
-          .update({ status: "error", error_detail: JSON.stringify(fetchInsertedError ?? "No inserted segments") })
+          .update({ status: "error", error_detail: formatErrorDetail(fetchInsertedError ?? "No inserted segments") })
           .eq("id", job.id);
         continue;
       }
@@ -193,10 +236,15 @@ serve(async (req) => {
         .from("segment_relevance")
         .upsert(relevancePayload, { onConflict: "segment_id" });
 
+      console.log("process_rag_queue: upserted segment relevance", {
+        jobId: job.id,
+        relevanceRows: relevancePayload.length,
+      });
+
       await supabase
         .from("content_sources")
         .update({
-          rag_processed_version_id: version.max_version_id ?? job.version_id,
+          rag_processed_version_id: job.version_id,
           transcription_status: "ingested",
         })
         .eq("id", version.source_id);
@@ -206,7 +254,7 @@ serve(async (req) => {
         entities_created: 0,
         relationships_created: 0,
         duration_ms: Math.round(performance.now() - jobStart),
-        max_version_id: version.max_version_id,
+        processed_version_id: job.version_id,
         embedding_model: embeddingModel,
         notes: "Placeholder pipeline executed. TODO: integrate Claude/Gemini + KG generation.",
       };
@@ -221,11 +269,16 @@ serve(async (req) => {
         .eq("id", job.id);
 
       jobResults.push({ job_id: job.id, segments: insertedSegments.length });
+      console.log("process_rag_queue: job complete", {
+        jobId: job.id,
+        segments: insertedSegments.length,
+        durationMs: resultSummary.duration_ms,
+      });
     } catch (error) {
       console.error("process_rag_queue: job failed", job.id, error);
       await supabase
         .from("rag_ingestion_queue")
-        .update({ status: "error", error_detail: JSON.stringify(error) })
+        .update({ status: "error", error_detail: formatErrorDetail(error) })
         .eq("id", job.id);
     }
   }

@@ -24,9 +24,9 @@
 ### Implementation Status — 2025-11-08
 
 - **RAG Submission Workflow:** Editors can push any H-version directly to the queue; `rag_submit_transcript` normalizes transcripts and enqueues jobs.
-- **Automated Processing:** `process_rag_queue` runs on Supabase Edge Functions, generates OpenAI embeddings, and writes `content_segments` + `segment_relevance`.
+- **Automated Processing:** `process_rag_queue` runs on Supabase Edge Functions, generates OpenAI embeddings, writes `content_segments` + `segment_relevance`, and updates `content_sources` (`transcription_status='ingested'`) after migrations `003_rag_core.sql` and `004_rag_version_links.sql` were applied to production (Nov 8).
 - **Search Experience:** `/rag` page uses the new `match_rag_content` RPC and logs queries in `user_queries`; Claude synthesis consumes the same segments.
-- **Observability:** `/admin/rag` dashboard tracks queue depth, processed segments, graph entity counts, and recent queries (with transcript usage rollups).
+- **Observability:** `/admin/rag` dashboard tracks queue depth, processed segments, graph entity counts, and recent queries (with transcript usage rollups); verified zero-error state after reprocessing first job.
 - **Next Up:** Knowledge graph extraction (entities/relationships) and richer answer formatting remain in-flight.
 
 ---

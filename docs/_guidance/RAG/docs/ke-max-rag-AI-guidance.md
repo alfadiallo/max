@@ -3,7 +3,7 @@
 
 **Project:** Max RAG - Key Elements Knowledge Platform  
 **Domain:** www.max.keyelements.co  
-**Last Updated:** 2025-11-07
+**Last Updated:** 2025-11-08
 
 ---
 
@@ -278,24 +278,22 @@ Focus on clinically meaningful relationships. Avoid trivial connections.
 
 > The “Push to Max RAG” button enqueues work in `rag_ingestion_queue`. A background worker drains this queue and performs the full RAG pipeline so search remains fresh without manual steps.
 
-- **Runtime:** Supabase Edge Function on a cron (every 5 minutes) or an Inngest job. Always invoked with the service-role key.
-- **Locking:** `FOR UPDATE SKIP LOCKED` on `status='queued'` records, batch size 10. Each job is immediately updated to `status='processing'`.
-- **Data load:** Retrieve `transcript_segments` (fall back to 3K-token sliding window if missing) plus transcript metadata from `transcript_versions`, `content_sources`, and `max_transcriptions`.
+- ✅ **Status (2025-11-08):** Supabase Edge Function `process_rag_queue` deployed and verified against production database.
+- **Runtime:** Manual trigger via service-role function call today; cron schedule planned next.
+- **Prerequisites:** Database migrations `002_transcripts_rag.sql`, `003_rag_core.sql`, and `004_rag_version_links.sql` applied to Supabase to create `content_segments`, `segment_relevance`, graph tables, and version linkage.
+- **Locking:** Reads queued rows, marks each `processing`, processes sequentially (batch size 5) with optional `FOR UPDATE SKIP LOCKED` upgrade.
+- **Data load:** Fetch `transcript_versions`, `transcript_segments`, and `content_sources` metadata; resolves `max_transcriptions` for display names.
 - **AI calls:**  
-  - Claude Sonnet 4 — entity extraction, relevance scoring, knowledge-graph relationships.  
-  - OpenAI embeddings — one vector per segment.  
-  - Gemini only if transcript segment exceeds Claude context safety.
+  - OpenAI embeddings (if keyed) — one vector per segment.  
+  - Claude/Gemini hooks stubbed for relevance/entity extraction (next milestone).
 - **Writes:**  
-  - `content_segments` — segment text, embedding, timestamps, source metadata.  
-  - `segment_relevance` — persona scores, content type, topics, confidence.  
-  - `kg_entities` / `kg_relationships` / `segment_entities` — upsert canonical entities and relationship edges.
-- **Summary envelope:** `result_summary` JSON with counts (segments, entities, relationships), processing duration, token usage, and warnings (low confidence <0.6, hallucination rejections).
-- **Error handling:** Exponential backoff (retry up to 3 times). On persistent failure, set `status='error'`, populate `error_detail`, and leave for manual review. Retries sleep 60s, doubling each attempt.
-- **Observability:** Structured logs (job id, transcript, duration, tokens) and metrics emitted for dashboards (segments/hour, queue depth, failure rate).
-- **Future hooks:**  
-  - Emit review tasks for low-confidence segments.  
-  - Slack/email notifications when jobs fail permanently.  
-  - Optional automatic requeue if new transcript version supersedes a processed one.
+  - `content_segments` — segment text, embeddings, timestamps, metadata references.  
+  - `segment_relevance` — initialized persona scores (zeroed) pending AI enrichment.  
+  - `content_sources` — updates `transcription_status` → `ingested`, records processed version id.  
+  - `rag_ingestion_queue` — stores per-job `result_summary` including processed counts and duration.
+- **Error handling:** Failures capture structured `error_detail`; jobs can be requeued after fixes (used when migrations missing).
+- **Observability:** Instrumented console logs (job start, segment counts, completion) surface in Supabase Edge Function logs; `/admin/rag` dashboard consumes queue + segment metrics.
+- **Next steps:** Schedule cron/inngest trigger, add Claude/Gemini processing for relevance + KG, and wire Slack/alerts for `error` state transitions.
 
 ---
 
