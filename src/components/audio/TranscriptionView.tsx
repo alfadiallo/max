@@ -1288,7 +1288,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                     <div className="bg-white border border-gray-300 rounded p-3 max-h-96 overflow-y-auto dark:bg-gray-800 dark:border-gray-600">
                       <pre className="whitespace-pre-wrap text-sm font-mono dark:text-gray-100">
                         {transcription.json_with_timestamps.segments.map(seg => 
-                          `[${formatTime(seg.start)}-${formatTime(seg.end)}] ${seg.text}`
+                          `[${formatTime(seg.start ?? 0)}-${formatTime(seg.end ?? 0)}] ${seg.text}`
                         ).join('\n')}
                       </pre>
                     </div>
@@ -1489,7 +1489,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                                                 {t1Segments.map((seg: any, idx: number) => (
                                                   <div key={idx} className="p-3 bg-gray-50 rounded border border-gray-200 dark:bg-gray-900 dark:border-gray-700">
                                                     <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
-                                                      {formatTime(seg.start)} - {formatTime(seg.end)}
+                                                      {formatTime(seg.start ?? 0)} - {formatTime(seg.end ?? 0)}
                                                     </div>
                                                     <div className="text-sm leading-relaxed dark:text-gray-100">{seg.text}</div>
                                                   </div>
@@ -1527,7 +1527,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                                                     >
                                                       <div className="flex items-center justify-between mb-1">
                                                         <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                          {formatTime(seg.start)} - {formatTime(seg.end)}
+                                                          {formatTime(seg.start ?? 0)} - {formatTime(seg.end ?? 0)}
                                                         </div>
                                                         {isEdited && (
                                                           <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded dark:bg-orange-600">
@@ -1614,7 +1614,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                                             <div key={idx} className="p-3 bg-white border border-gray-200 rounded dark:bg-gray-800 dark:border-gray-600">
                                               <div className="flex items-center justify-between mb-1">
                                                 <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                  {formatTime(seg.start)} - {formatTime(seg.end)}
+                                                  {formatTime(seg.start ?? 0)} - {formatTime(seg.end ?? 0)}
                                                 </div>
                                                 {segmentWasEdited && (
                                                   <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded dark:bg-orange-600">
@@ -1928,7 +1928,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                               </div>
                               <div className="bg-purple-50 border border-purple-200 rounded p-3 max-h-48 overflow-y-auto">
                                 <pre className="whitespace-pre-wrap text-xs font-mono">
-                                  {finalVersionObj.segments.map(seg => `[${formatTime(seg.start)}-${formatTime(seg.end)}]\n${seg.text}\n`).join('\n')}
+                                  {finalVersionObj.segments.map(seg => `[${formatTime(seg.start ?? 0)}-${formatTime(seg.end ?? 0)}]\n${seg.text}\n`).join('\n')}
                                 </pre>
                               </div>
                             </div>
@@ -2182,7 +2182,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                                   return splitEnglish.map((seg: any, idx: number) => (
                                     <div key={idx} className="p-3 bg-gray-50 rounded border border-gray-200 dark:bg-gray-900 dark:border-gray-700">
                                       <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
-                                        {formatTime(seg.start)} - {formatTime(seg.end)}
+                                        {formatTime(seg.start ?? 0)} - {formatTime(seg.end ?? 0)}
                                       </div>
                                       <div className="text-sm leading-relaxed dark:text-gray-100">{seg.text}</div>
                                     </div>
@@ -2245,7 +2245,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
                                     return (
                                       <div key={seg.id || idx} className="p-3 bg-blue-50 rounded border border-blue-200 dark:bg-blue-900 dark:border-blue-700">
                                         <div className="text-xs text-gray-500 mb-1 dark:text-gray-400">
-                                          {formatTime(seg.start)} - {formatTime(seg.end)}
+                                          {formatTime(seg.start ?? 0)} - {formatTime(seg.end ?? 0)}
                                         </div>
                                         <textarea
                                           value={segmentText}
