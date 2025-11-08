@@ -416,7 +416,13 @@ export default function ProjectDetailPage() {
                   {file.file_url && (
                     <AudioPlayer audioUrl={file.file_url} fileName={file.file_name} />
                   )}
-                  <TranscriptionView audioFileId={file.id} audioDuration={file.duration_seconds} />
+                  <TranscriptionView
+                    audioFileId={file.id}
+                    audioDuration={file.duration_seconds}
+                    audioFileName={file.display_name || file.file_name}
+                    projectId={projectId}
+                    projectName={project.name}
+                  />
                 </div>
               ))}
             </div>

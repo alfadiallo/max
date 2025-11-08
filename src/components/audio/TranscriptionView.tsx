@@ -5,6 +5,14 @@ import { createClient } from '@/lib/supabase/client'
 import { ANALYSIS_USER_PROMPT } from '@/lib/prompts/transcription-analysis'
 import { computeTextDiff } from '@/lib/utils/textDiff'
 
+const SUPABASE_FUNCTION_URL = (() => {
+  if (typeof process === 'undefined') return ''
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  if (!baseUrl) return ''
+  const fnBase = baseUrl.replace('.supabase.co', '.functions.supabase.co')
+  return fnBase.endsWith('/') ? `${fnBase}submit_to_rag` : `${fnBase}/submit_to_rag`
+})()
+
 interface Transcription {
   id: string
   raw_text: string
@@ -68,9 +76,25 @@ interface Transcription {
 interface TranscriptionViewProps {
   audioFileId: string
   audioDuration?: number | null
+  audioFileName?: string | null
+  projectId?: string
+  projectName?: string | null
 }
 
-export default function TranscriptionView({ audioFileId, audioDuration }: TranscriptionViewProps) {
+interface FinalVersionDetails {
+  id: string
+  type: string
+  text: string
+  segments: Array<{
+    id?: number
+    start?: number
+    end?: number
+    text: string
+  }>
+  metadata?: Record<string, unknown> | null
+}
+
+export default function TranscriptionView({ audioFileId, audioDuration, audioFileName, projectId, projectName }: TranscriptionViewProps) {
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([])
   const [loading, setLoading] = useState(false)
   const [showText, setShowText] = useState(false)
@@ -497,23 +521,60 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
     }
   }
 
-  const handleSendToRAG = async (transcriptionId: string) => {
-    setSendingToRAG(transcriptionId)
+  const handleSendToRAG = async (transcription: Transcription, finalData: FinalVersionDetails) => {
+    if (!finalData?.type?.toUpperCase().startsWith('H')) {
+      alert('Please promote an H- version before pushing to Max RAG.')
+      return
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession()
+    const session = sessionData.session
+
+    if (!session?.access_token || !session.user) {
+      alert('You must be signed in to push transcripts to Max RAG.')
+      return
+    }
+
+    if (!SUPABASE_FUNCTION_URL) {
+      alert('Supabase function URL is not configured. Please set NEXT_PUBLIC_SUPABASE_URL.')
+      return
+    }
+
+    setSendingToRAG(transcription.id)
     try {
-      const response = await fetch('/api/rag/send-to-rag', {
+      const response = await fetch(SUPABASE_FUNCTION_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcriptionId })
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          sourceId: transcription.id,
+          sourceTitle: [projectName, audioFileName].filter(Boolean).join(' • ') || finalData.type,
+          versionLabel: finalData.type,
+          transcriptText: finalData.text,
+          metadata: finalData.metadata ?? {},
+          sourceMetadata: {
+            projectId,
+            projectName,
+            audioFileId,
+            audioFileName,
+            transcriptionId: transcription.id,
+            finalVersionId: finalData.id,
+            segments: finalData.segments,
+          },
+          reviewerId: session.user.id,
+        }),
       })
       const result = await response.json()
       
-      if (result.success) {
-        alert(result.message || '✅ Transcript indexed for RAG!')
+      if (response.ok && result?.ok) {
+        alert('✅ Transcript submitted to Max RAG!')
       } else {
-        alert(`Failed to index for RAG: ${result.error}`)
+        alert(`Failed to submit to Max RAG: ${result?.error || 'Unknown error'}`)
       }
     } catch (error: any) {
-      alert(`Error indexing for RAG: ${error.message}`)
+      alert(`Error submitting to Max RAG: ${error.message}`)
     } finally {
       setSendingToRAG(null)
     }
@@ -1595,7 +1656,7 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                 </p>
               )}
               {finalVersion && transcriptions.map((transcription) => {
-                let finalVersionObj = null
+                let finalVersionObj: FinalVersionDetails | null = null
                 
                 if (finalVersion.startsWith('t1-') && finalVersion.includes(transcription.id)) {
                   // Final is T-1
@@ -1652,25 +1713,23 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
                             '🚀 Send to Insight'
                           )}
                         </button>
-                        {sentToInsight === transcription.id && (
-                          <button
-                            onClick={() => handleSendToRAG(transcription.id)}
-                            disabled={sendingToRAG === transcription.id}
-                            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded hover:from-purple-700 hover:to-pink-700 text-sm disabled:opacity-50 flex items-center gap-2 border border-purple-400"
-                          >
-                            {sendingToRAG === transcription.id ? (
-                              <>
-                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Indexing...
-                              </>
-                            ) : (
-                              '🤖 Index for RAG'
-                            )}
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleSendToRAG(transcription, finalVersionObj)}
+                          disabled={sendingToRAG === transcription.id}
+                          className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded hover:from-purple-700 hover:to-pink-700 text-sm disabled:opacity-50 flex items-center gap-2 border border-purple-400"
+                        >
+                          {sendingToRAG === transcription.id ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Sending...
+                            </>
+                          ) : (
+                            '🚀 Push to Max RAG'
+                          )}
+                        </button>
                       </div>
                     </div>
                     
@@ -1834,8 +1893,8 @@ export default function TranscriptionView({ audioFileId, audioDuration }: Transc
 
                   {/* Dubbing Script and Complete Transcript */}
                   <div className="border-t border-gray-200 pt-4 mt-4 space-y-4">
-                    {transcriptions.map((transcription) => {
-                      let finalVersionObj = null
+              {transcriptions.map((transcription) => {
+                let finalVersionObj: FinalVersionDetails | null = null
                       
                       if (finalVersion && finalVersion.startsWith('t1-') && finalVersion.includes(transcription.id)) {
                         finalVersionObj = {
