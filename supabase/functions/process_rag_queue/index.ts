@@ -178,6 +178,45 @@ async function callClaudeModel(model: string, prompt: string) {
   return response;
 }
 
+type AnthropicModelDescriptor = {
+  id: string;
+  display_name?: string;
+  type?: string;
+};
+
+let cachedAnthropicModels: AnthropicModelDescriptor[] | null = null;
+
+async function listAvailableAnthropicModels(): Promise<AnthropicModelDescriptor[]> {
+  if (!anthropicEnabled) return [];
+  if (cachedAnthropicModels) return cachedAnthropicModels;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/models", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn("Failed to list Anthropic models", errorText);
+      return [];
+    }
+
+    const json = await response.json();
+    const models = Array.isArray(json?.data) ? (json.data as AnthropicModelDescriptor[]) : [];
+    cachedAnthropicModels = models;
+    console.log("Available Anthropic models", models.map((model) => model.id));
+    return models;
+  } catch (error) {
+    console.warn("Error fetching Anthropic models", error);
+    return [];
+  }
+}
+
 async function analyzeSegmentWithClaude(segmentText: string, metadata: { sequence: number; total: number; projectName?: string | null; audioName?: string | null }): Promise<SegmentAnalysis | null> {
   if (!anthropicEnabled) return null;
 
@@ -201,7 +240,17 @@ Segment (sequence ${metadata.sequence}/${metadata.total}):
 `;
 
   try {
-    const modelsToTry = Array.from(new Set([ANTHROPIC_MODEL, ...FALLBACK_ANTHROPIC_MODELS]));
+    const availableModels = await listAvailableAnthropicModels();
+    const availableModelIds = new Set(availableModels.map((model) => model.id));
+    const desiredOrder = Array.from(new Set([ANTHROPIC_MODEL, ...FALLBACK_ANTHROPIC_MODELS]));
+    const modelsToTry =
+      availableModelIds.size > 0
+        ? desiredOrder.filter((model) => availableModelIds.has(model)).concat(
+            desiredOrder.some((model) => availableModelIds.has(model))
+              ? []
+              : Array.from(availableModelIds),
+          )
+        : desiredOrder;
     let lastError: any = null;
     for (const model of modelsToTry) {
       const response = await callClaudeModel(model, prompt);
@@ -225,29 +274,30 @@ Segment (sequence ${metadata.sequence}/${metadata.total}):
       }
 
       const json = await response.json();
-    const text = json?.content?.[0]?.text ?? "";
-    if (!text) return null;
-    const cleaned = text.trim().replace(/^```json/i, "").replace(/```$/, "").trim();
-    const parsed = JSON.parse(cleaned);
+      const text = json?.content?.[0]?.text ?? "";
+      if (!text) return null;
+      const cleaned = text.trim().replace(/^```json/i, "").replace(/```$/, "").trim();
+      const parsed = JSON.parse(cleaned);
 
-    const analysis: SegmentAnalysis = {
-      relevance: {
-        dentist: parsed?.relevance?.dentist ?? null,
-        dental_assistant: parsed?.relevance?.dental_assistant ?? null,
-        hygienist: parsed?.relevance?.hygienist ?? null,
-        treatment_coordinator: parsed?.relevance?.treatment_coordinator ?? null,
-        align_rep: parsed?.relevance?.align_rep ?? null,
-      },
-      content_type: parsed?.content_type ?? null,
-      clinical_complexity: parsed?.clinical_complexity ?? null,
-      primary_focus: parsed?.primary_focus ?? null,
-      topics: Array.isArray(parsed?.topics) ? parsed.topics : [],
-      confidence_score: parsed?.confidence_score ?? null,
-      entities: Array.isArray(parsed?.entities) ? parsed.entities : [],
-      relationships: Array.isArray(parsed?.relationships) ? parsed.relationships : [],
-    };
+      const analysis: SegmentAnalysis = {
+        relevance: {
+          dentist: parsed?.relevance?.dentist ?? null,
+          dental_assistant: parsed?.relevance?.dental_assistant ?? null,
+          hygienist: parsed?.relevance?.hygienist ?? null,
+          treatment_coordinator: parsed?.relevance?.treatment_coordinator ?? null,
+          align_rep: parsed?.relevance?.align_rep ?? null,
+        },
+        content_type: parsed?.content_type ?? null,
+        clinical_complexity: parsed?.clinical_complexity ?? null,
+        primary_focus: parsed?.primary_focus ?? null,
+        topics: Array.isArray(parsed?.topics) ? parsed.topics : [],
+        confidence_score: parsed?.confidence_score ?? null,
+        entities: Array.isArray(parsed?.entities) ? parsed.entities : [],
+        relationships: Array.isArray(parsed?.relationships) ? parsed.relationships : [],
+      };
 
-    return analysis;
+      console.log("Claude analysis result", { model, analysis });
+      return analysis;
     }
 
     if (lastError) {
