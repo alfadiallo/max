@@ -16,6 +16,7 @@
 - Enabled Claude enrichment inside `process_rag_queue`, logging model availability, retrying with fallbacks, and writing persona relevance/topics into `segment_relevance` (`d73069c`, `fb598d8`).
 - Hardened `/api/admin/rag/reset` (service-role deletion, error reporting) so reset/requeue works reliably in production (`d73069c`).
 - Added Supabase CLI shortcuts + deploy guidance; verified Claude model availability and stored analysis logs to debug anthropic responses (latest Supabase deploys).
+- Updated `rag_submit_transcript` to chunk transcripts into ~1.2k character segments so each upload creates multiple embeddings. **Action:** run “Reset RAG Data” then “Requeue”/“Run Worker Now” for existing versions to rebuild segments with the new logic (`chunking` change).
 
 **Outstanding / Next Up**
 - Expand chunking logic in `rag_submit_transcript` so transcripts are split into usable segments (currently 1 segment/version).

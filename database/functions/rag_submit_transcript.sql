@@ -97,22 +97,66 @@ begin
 
   delete from transcript_segments where version_id = v_version_id;
 
-  for v_segment in
-    select trim(t) as segment_text
-    from regexp_split_to_table(p_transcript_text, E'\n{2,}') as t
-    where length(trim(t)) > 0
-  loop
-    insert into transcript_segments (
-      version_id,
-      sequence_number,
-      text
-    ) values (
-      v_version_id,
-      v_segment_sequence,
-      v_segment
-    );
-    v_segment_sequence := v_segment_sequence + 1;
-  end loop;
+  -- Chunk transcript into ~1200 character segments, falling back to the full text if needed.
+  <<chunking>>
+  declare
+    v_max_chunk_chars constant integer := 1200;
+    v_min_chunk_chars constant integer := 600;
+    v_buffer text := '';
+    v_paragraph text;
+    v_chunk text;
+    v_remaining text;
+    v_separator text := E'\n\n';
+  begin
+    for v_paragraph in
+      select trim(t) as paragraph
+      from regexp_split_to_table(p_transcript_text, E'\n+') as t
+      where length(trim(t)) > 0
+    loop
+      v_remaining := v_paragraph;
+
+      while length(v_remaining) > 0 loop
+        if length(v_remaining) > v_max_chunk_chars then
+          -- Extract a chunk at the limit boundary.
+          v_chunk := substring(v_remaining from 1 for v_max_chunk_chars);
+          v_remaining := ltrim(substring(v_remaining from v_max_chunk_chars + 1));
+
+          if length(v_buffer) > 0 then
+            insert into transcript_segments (version_id, sequence_number, text)
+            values (v_version_id, v_segment_sequence, v_buffer);
+            v_segment_sequence := v_segment_sequence + 1;
+            v_buffer := '';
+          end if;
+
+          insert into transcript_segments (version_id, sequence_number, text)
+          values (v_version_id, v_segment_sequence, v_chunk);
+          v_segment_sequence := v_segment_sequence + 1;
+        else
+          exit;
+        end if;
+      end loop;
+
+      if length(v_remaining) > 0 then
+        if length(v_buffer) = 0 then
+          v_buffer := v_remaining;
+        elsif length(v_buffer || v_separator || v_remaining) <= v_max_chunk_chars
+          or (length(v_buffer) < v_min_chunk_chars and length(v_remaining) < v_min_chunk_chars) then
+          v_buffer := v_buffer || v_separator || v_remaining;
+        else
+          insert into transcript_segments (version_id, sequence_number, text)
+          values (v_version_id, v_segment_sequence, v_buffer);
+          v_segment_sequence := v_segment_sequence + 1;
+          v_buffer := v_remaining;
+        end if;
+      end if;
+    end loop;
+
+    if length(v_buffer) > 0 then
+      insert into transcript_segments (version_id, sequence_number, text)
+      values (v_version_id, v_segment_sequence, v_buffer);
+      v_segment_sequence := v_segment_sequence + 1;
+    end if;
+  end chunking;
 
   if v_segment_sequence = 1 then
     insert into transcript_segments (
@@ -124,6 +168,7 @@ begin
       1,
       p_transcript_text
     );
+    v_segment_sequence := 2;
   end if;
 
   insert into rag_ingestion_queue (
