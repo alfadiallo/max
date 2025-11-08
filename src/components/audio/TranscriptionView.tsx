@@ -601,6 +601,7 @@ export default function TranscriptionView({ audioFileId, audioDuration, audioFil
       const result = await response.json()
       
       if (response.ok && result?.ok) {
+        await loadTranscriptions()
         alert('✅ Transcript submitted to Max RAG!')
       } else {
         alert(`Failed to submit to Max RAG: ${result?.error || 'Unknown error'}`)

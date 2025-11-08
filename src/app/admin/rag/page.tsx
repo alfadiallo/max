@@ -7,12 +7,20 @@ export const dynamic = 'force-dynamic'
 interface QueueEntry {
   id: string
   source_id: string | null
+  version_id: string | null
   source_max_version_id: string | null
   status: string
   submitted_at: string
   processed_at: string | null
   result_summary: Record<string, any> | null
   error_detail: string | null
+  source?: {
+    title?: string | null
+    metadata?: Record<string, any> | null
+  } | null
+  version?: {
+    version_label?: string | null
+  } | null
 }
 
 interface QueryEntry {
@@ -43,7 +51,24 @@ export default async function RAGDashboardPage() {
   const [{ data: queueEntries }, queuedCount, processingCount, errorCount, completeCount, contentSegmentsCount, entitiesCount, relationshipsCount, queriesResult] = await Promise.all([
     supabase
       .from('rag_ingestion_queue')
-      .select('id, source_id, source_max_version_id, status, submitted_at, processed_at, result_summary, error_detail')
+      .select(`
+        id,
+        source_id,
+        version_id,
+        source_max_version_id,
+        status,
+        submitted_at,
+        processed_at,
+        result_summary,
+        error_detail,
+        source:content_sources (
+          title,
+          metadata
+        ),
+        version:transcript_versions (
+          version_label
+        )
+      `)
       .order('submitted_at', { ascending: false })
       .limit(25),
     supabase.from('rag_ingestion_queue').select('*', { count: 'exact', head: true }).eq('status', 'queued'),
@@ -135,6 +160,73 @@ export default async function RAGDashboardPage() {
     { title: 'Graph Relationships', count: relationshipsCount.count ?? 0, tint: 'bg-pink-100 text-pink-800' },
   ]
 
+  const getSourceDisplay = (job: QueueEntry) => {
+    const metadata = (job.source?.metadata ?? {}) as Record<string, any>
+    const audioName = metadata?.audioFileName || metadata?.audio_file_name
+    const projectName = metadata?.projectName || metadata?.project_name
+    const title =
+      job.source?.title ||
+      audioName ||
+      job.source_id ||
+      '—'
+
+    const subtitleParts: string[] = []
+    if (projectName) subtitleParts.push(projectName)
+    if (audioName && audioName !== title) subtitleParts.push(audioName)
+
+    return {
+      title,
+      subtitle: subtitleParts.length > 0 ? subtitleParts.join(' • ') : null,
+    }
+  }
+
+  const renderSummary = (job: QueueEntry) => {
+    if (job.result_summary) {
+      const summary = job.result_summary
+      const details: string[] = []
+      if (summary.segments_processed !== undefined) {
+        const count = summary.segments_processed
+        details.push(`${count} segment${count === 1 ? '' : 's'}`)
+      }
+      if (summary.duration_ms !== undefined) {
+        const duration = Math.round(summary.duration_ms)
+        details.push(`${duration} ms`)
+      }
+      if (summary.embedding_model) {
+        details.push(`Embedding: ${summary.embedding_model}`)
+      }
+
+      return (
+        <div className="text-sm text-gray-700 dark:text-gray-300">
+          {summary.notes || 'Processed'}
+          {details.length > 0 && (
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {details.join(' • ')}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    if (job.error_detail) {
+      let message = job.error_detail
+      try {
+        const parsed = JSON.parse(job.error_detail)
+        if (parsed?.message) {
+          message = parsed.message
+        } else if (typeof parsed === 'object') {
+          message = JSON.stringify(parsed)
+        }
+      } catch {
+        // ignore parse errors and use raw string
+      }
+
+      return <span className="text-sm text-red-600 dark:text-red-400">Error: {message}</span>
+    }
+
+    return <span className="text-sm text-gray-400">—</span>
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <main className="max-w-7xl mx-auto py-10 px-6 space-y-8">
@@ -172,7 +264,7 @@ export default async function RAGDashboardPage() {
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Source (Transcription)</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Source</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">H-Version</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Submitted</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Processed</th>
@@ -194,16 +286,32 @@ export default async function RAGDashboardPage() {
                           {job.status.toUpperCase()}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200 text-xs font-mono">{job.source_id ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200 text-xs font-mono">{job.source_max_version_id ?? '—'}</td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const display = getSourceDisplay(job)
+                          return (
+                            <div className="text-sm text-gray-800 dark:text-gray-200">
+                              {display.title}
+                              {display.subtitle && (
+                                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                  {display.subtitle}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200 text-sm">
+                        {job.version?.version_label ?? '—'}
+                      </td>
                       <td className="px-4 py-3 text-gray-700 dark:text-gray-200">
                         {new Date(job.submitted_at).toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-gray-700 dark:text-gray-200">
                         {job.processed_at ? new Date(job.processed_at).toLocaleString() : '—'}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
-                        {job.result_summary ? JSON.stringify(job.result_summary) : job.error_detail ? `Error: ${job.error_detail}` : '—'}
+                      <td className="px-4 py-3">
+                        {renderSummary(job)}
                       </td>
                     </tr>
                   ))
