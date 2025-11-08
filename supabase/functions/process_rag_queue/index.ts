@@ -19,7 +19,14 @@ const OPENAI_EMBEDDING_MODEL = Deno.env.get("RAG_EMBEDDING_MODEL") ?? "text-embe
 const EMBEDDING_CHUNK_CHAR_LIMIT = Number(Deno.env.get("RAG_EMBEDDING_CHAR_LIMIT") ?? "3200");
 const EMBEDDING_BATCH_SIZE = Number(Deno.env.get("RAG_EMBEDDING_BATCH") ?? "16");
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const ANTHROPIC_MODEL = Deno.env.get("RAG_CLAUDE_MODEL") ?? "claude-3-5-sonnet-20241022";
+const FALLBACK_ANTHROPIC_MODELS = [
+  "claude-3-5-sonnet-20241022",
+  "claude-3-5-sonnet-20240620",
+  "claude-3-opus-20240229",
+  "claude-3-5-sonnet-20241005",
+  "claude-3-haiku-20240307",
+];
+const ANTHROPIC_MODEL = Deno.env.get("RAG_CLAUDE_MODEL") ?? FALLBACK_ANTHROPIC_MODELS[0];
 const SLACK_WEBHOOK_URL = Deno.env.get("SLACK_WEBHOOK_URL") ?? "";
 const QUEUE_ALERT_THRESHOLD = Number(Deno.env.get("RAG_ALERT_QUEUE_THRESHOLD") ?? "25");
 
@@ -148,6 +155,29 @@ async function sendSlackAlert(message: string, details?: Record<string, unknown>
   }
 }
 
+async function callClaudeModel(model: string, prompt: string) {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 800,
+      temperature: 0.2,
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    }),
+  });
+  return response;
+}
+
 async function analyzeSegmentWithClaude(segmentText: string, metadata: { sequence: number; total: number; projectName?: string | null; audioName?: string | null }): Promise<SegmentAnalysis | null> {
   if (!anthropicEnabled) return null;
 
@@ -171,37 +201,30 @@ Segment (sequence ${metadata.sequence}/${metadata.total}):
 `;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: ANTHROPIC_MODEL,
-        max_tokens: 800,
-        temperature: 0.2,
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-      }),
-    });
+    const modelsToTry = Array.from(new Set([ANTHROPIC_MODEL, ...FALLBACK_ANTHROPIC_MODELS]));
+    let lastError: any = null;
+    for (const model of modelsToTry) {
+      const response = await callClaudeModel(model, prompt);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Claude API error", errorText);
-      await sendSlackAlert(":warning: RAG worker failed to call Claude", {
-        status: response.status,
-        payload: errorText,
-      });
-      return null;
-    }
+      if (!response.ok) {
+        const errorText = await response.text();
+        lastError = { status: response.status, payload: errorText };
+        console.error("Claude API error", errorText);
 
-    const json = await response.json();
+        const notFound = response.status === 404 || /not_found_error/i.test(errorText);
+        if (notFound) {
+          console.warn(`Claude model ${model} not found. Trying fallback if available.`);
+          continue;
+        }
+
+        await sendSlackAlert(":warning: RAG worker failed to call Claude", {
+          status: response.status,
+          payload: errorText,
+        });
+        return null;
+      }
+
+      const json = await response.json();
     const text = json?.content?.[0]?.text ?? "";
     if (!text) return null;
     const cleaned = text.trim().replace(/^```json/i, "").replace(/```$/, "").trim();
@@ -225,6 +248,12 @@ Segment (sequence ${metadata.sequence}/${metadata.total}):
     };
 
     return analysis;
+    }
+
+    if (lastError) {
+      await sendSlackAlert(":warning: RAG worker failed to call Claude", lastError);
+    }
+    return null;
   } catch (error) {
     console.error("Failed to analyze segment with Claude", error);
     await sendSlackAlert(":warning: Claude analysis failed for a segment", {
@@ -509,6 +538,18 @@ serve(async (req) => {
           analysis = await analyzeSegmentWithClaude(segment.text, {
             sequence: segment.sequence_number,
             total: segments.length,
+            projectName: version.metadata_json?.project_name ?? null,
+            audioName: version.metadata_json?.audio_file_name ?? null,
+          });
+          console.log("process_rag_queue: claude analysis", {
+            jobId: job.id,
+            sequence: segment.sequence_number,
+            analysis,
+          });
+        } else {
+          console.log("process_rag_queue: claude skipped (disabled)", {
+            jobId: job.id,
+            sequence: segment.sequence_number,
           });
         }
 
