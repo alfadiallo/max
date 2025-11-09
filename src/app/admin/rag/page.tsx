@@ -6,6 +6,7 @@ import nextDynamic from 'next/dynamic'
 export const dynamic = 'force-dynamic'
 
 const RunWorkerButton = nextDynamic(() => import('./RunWorkerButton'), { ssr: false })
+const QueueActions = nextDynamic(() => import('./QueueActions'), { ssr: false })
 
 interface QueueEntry {
   id: string
@@ -323,57 +324,8 @@ export default async function RAGDashboardPage() {
                       <td className="px-4 py-3">
                         {renderSummary(job)}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 space-x-2">
-                        {job.status === 'error' && (
-                          <button
-                            onClick={async () => {
-                              try {
-                                const response = await fetch('/api/admin/rag/jobs/requeue', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ jobId: job.id }),
-                                })
-                                const result = await response.json()
-                                if (!response.ok || !result?.ok) {
-                                  alert(result?.error || 'Failed to requeue job')
-                                } else {
-                                  alert('Job requeued')
-                                  window.location.reload()
-                                }
-                              } catch (error: any) {
-                                alert(error.message)
-                              }
-                            }}
-                            className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
-                          >
-                            Retry
-                          </button>
-                        )}
-                        <button
-                          onClick={async () => {
-                            const confirmed = window.confirm('Delete this submission and all associated segments?')
-                            if (!confirmed) return
-                            try {
-                              const response = await fetch('/api/admin/rag/jobs/delete', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ jobId: job.id }),
-                              })
-                              const result = await response.json()
-                              if (!response.ok || !result?.ok) {
-                                alert(result?.error || 'Failed to delete submission')
-                              } else {
-                                alert('Submission deleted')
-                                window.location.reload()
-                              }
-                            } catch (error: any) {
-                              alert(error.message)
-                            }
-                          }}
-                          className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700"
-                        >
-                          Delete
-                        </button>
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                        <QueueActions jobId={job.id} jobStatus={job.status} />
                       </td>
                     </tr>
                   ))
