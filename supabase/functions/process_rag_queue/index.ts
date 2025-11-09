@@ -88,7 +88,14 @@ function findChunkBreak(text: string, limit: number): number {
   return limit;
 }
 
-function chunkTranscriptText(text: string, maxChars = EMBEDDING_CHUNK_CHAR_LIMIT, minChars = Math.round(EMBEDDING_CHUNK_CHAR_LIMIT / 2)): RawSegment[] {
+const MAX_CHUNK_CHARS = 1200;
+const MIN_CHUNK_CHARS = 600;
+
+function chunkTranscriptText(
+  text: string,
+  maxChars = MAX_CHUNK_CHARS,
+  minChars = MIN_CHUNK_CHARS,
+): RawSegment[] {
   const cleaned = text?.trim();
   if (!cleaned) return [];
 
@@ -149,7 +156,7 @@ function normalizeSegments(existing: RawSegment[], transcriptText: string): RawS
 
   const needsChunking =
     existing.length === 1 &&
-    (!existing[0]?.text || existing[0].text.length > EMBEDDING_CHUNK_CHAR_LIMIT);
+    (!existing[0]?.text || existing[0].text.length > MAX_CHUNK_CHARS);
 
   if (!needsChunking) {
     return existing.map((segment, index) => ({
