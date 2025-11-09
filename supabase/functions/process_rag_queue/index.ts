@@ -41,6 +41,14 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const anthropicEnabled = Boolean(ANTHROPIC_API_KEY);
 console.log("process_rag_queue: anthropicEnabled", anthropicEnabled ? "enabled" : "disabled");
 
+type RawSegment = {
+  id?: string | null;
+  sequence_number: number;
+  start_time?: string | null;
+  end_time?: string | null;
+  text: string;
+};
+
 function chunkTextForEmbedding(text: string, limit = EMBEDDING_CHUNK_CHAR_LIMIT): string[] {
   const cleaned = text?.trim();
   if (!cleaned) return [];
@@ -66,6 +74,98 @@ function chunkTextForEmbedding(text: string, limit = EMBEDDING_CHUNK_CHAR_LIMIT)
   }
 
   return chunks;
+}
+
+function findChunkBreak(text: string, limit: number): number {
+  if (text.length <= limit) return text.length;
+  const slice = text.slice(0, limit + 1);
+  const lastWhitespace = slice.lastIndexOf(" ");
+  const lastPunctuation = Math.max(slice.lastIndexOf("."), slice.lastIndexOf("!"), slice.lastIndexOf("?"));
+  const breakIndex = Math.max(lastWhitespace, lastPunctuation);
+  if (breakIndex >= limit * 0.6) {
+    return breakIndex + 1;
+  }
+  return limit;
+}
+
+function chunkTranscriptText(text: string, maxChars = EMBEDDING_CHUNK_CHAR_LIMIT, minChars = Math.round(EMBEDDING_CHUNK_CHAR_LIMIT / 2)): RawSegment[] {
+  const cleaned = text?.trim();
+  if (!cleaned) return [];
+
+  const paragraphs = cleaned.split(/\n+/).map((para) => para.trim()).filter(Boolean);
+  const units = paragraphs.length > 0 ? paragraphs : [cleaned];
+
+  const chunks: string[] = [];
+  let buffer = "";
+
+  for (const unit of units) {
+    let remaining = unit;
+
+    if (remaining.length > maxChars) {
+      while (remaining.length > maxChars) {
+        const breakpoint = findChunkBreak(remaining, maxChars);
+        const chunk = remaining.slice(0, breakpoint).trim();
+        if (chunk.length > 0) {
+          if (buffer.length > 0) {
+            chunks.push(buffer);
+            buffer = "";
+          }
+          chunks.push(chunk);
+        }
+        remaining = remaining.slice(breakpoint).trimStart();
+      }
+    }
+
+    if (!remaining.length) continue;
+
+    if (!buffer.length) {
+      buffer = remaining;
+    } else if ((buffer + "\n\n" + remaining).length <= maxChars || (buffer.length < minChars && remaining.length < minChars)) {
+      buffer = buffer + "\n\n" + remaining;
+    } else {
+      chunks.push(buffer);
+      buffer = remaining;
+    }
+  }
+
+  if (buffer.length > 0) {
+    chunks.push(buffer);
+  }
+
+  if (chunks.length === 0) {
+    chunks.push(cleaned);
+  }
+
+  return chunks.map((chunk, index) => ({
+    sequence_number: index + 1,
+    text: chunk.trim(),
+  }));
+}
+
+function normalizeSegments(existing: RawSegment[], transcriptText: string): RawSegment[] {
+  if (!existing || existing.length === 0) {
+    return chunkTranscriptText(transcriptText);
+  }
+
+  const needsChunking =
+    existing.length === 1 &&
+    (!existing[0]?.text || existing[0].text.length > EMBEDDING_CHUNK_CHAR_LIMIT);
+
+  if (!needsChunking) {
+    return existing.map((segment, index) => ({
+      id: segment.id ?? null,
+      sequence_number: segment.sequence_number ?? index + 1,
+      start_time: segment.start_time ?? null,
+      end_time: segment.end_time ?? null,
+      text: segment.text ?? "",
+    }));
+  }
+
+  const sourceText = existing[0]?.text?.trim() || transcriptText;
+  return chunkTranscriptText(sourceText).map((chunk, index) => ({
+    sequence_number: index + 1,
+    text: chunk.text,
+  }));
 }
 
 function averageVectors(vectors: number[][]): number[] | null {
@@ -455,11 +555,15 @@ serve(async (req) => {
         segmentCount: segments.length,
       });
 
+      const normalizedSegments = normalizeSegments(
+        (segmentError || !segments ? [] : segments) as RawSegment[],
+        version.transcript_text ?? "",
+      );
 
-      if (segmentError || !segments || segments.length === 0) {
+      if (!normalizedSegments || normalizedSegments.length === 0) {
         await supabase
           .from("rag_ingestion_queue")
-          .update({ status: "error", error_detail: formatErrorDetail(segmentError ?? "No transcript segments") })
+          .update({ status: "error", error_detail: "No transcript content available for processing" })
           .eq("id", job.id);
         continue;
       }
@@ -525,13 +629,13 @@ serve(async (req) => {
         console.error("process_rag_queue: failed to clear previous content segments", job.id, deleteContentError);
       }
 
-      const contentRows = segments.map((segment, idx) => ({
+      const contentRows = normalizedSegments.map((segment, idx) => ({
         source_id: version.source_id,
         version_id: version.id,
         segment_text: segment.text,
         sequence_number: segment.sequence_number,
-        start_timestamp: segment.start_time,
-        end_timestamp: segment.end_time,
+        start_timestamp: segment.start_time ?? null,
+        end_timestamp: segment.end_time ?? null,
         embedding: segmentEmbeddings[idx] ?? null,
         metadata: {
           transcript_version_id: version.id,
@@ -576,7 +680,7 @@ serve(async (req) => {
 
       for (let idx = 0; idx < insertedSegments.length; idx++) {
         const inserted = insertedSegments[idx];
-        const segment = segments.find((seg) => seg.sequence_number === inserted.sequence_number);
+        const segment = normalizedSegments.find((seg) => seg.sequence_number === inserted.sequence_number);
 
         if (!segment) {
           console.warn("process_rag_queue: missing segment text", inserted);
