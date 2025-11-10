@@ -13,7 +13,8 @@ declare const Deno: {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const BATCH_SIZE = Number(Deno.env.get("RAG_WORKER_BATCH") ?? "5");
+const BATCH_SIZE = Number(Deno.env.get("RAG_WORKER_BATCH") ?? "1");
+const SEGMENTS_PER_RUN = Number(Deno.env.get("RAG_SEGMENTS_PER_RUN") ?? "8");
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 const OPENAI_EMBEDDING_MODEL = Deno.env.get("RAG_EMBEDDING_MODEL") ?? "text-embedding-3-small";
 const EMBEDDING_CHUNK_CHAR_LIMIT = Number(Deno.env.get("RAG_EMBEDDING_CHAR_LIMIT") ?? "3200");
@@ -27,6 +28,7 @@ const FALLBACK_ANTHROPIC_MODELS = [
   "claude-3-haiku-20240307",
 ];
 const ANTHROPIC_MODEL = Deno.env.get("RAG_CLAUDE_MODEL") ?? FALLBACK_ANTHROPIC_MODELS[0];
+const CLAUDE_CONCURRENCY = Number(Deno.env.get("RAG_CLAUDE_CONCURRENCY") ?? "3");
 const SLACK_WEBHOOK_URL = Deno.env.get("SLACK_WEBHOOK_URL") ?? "";
 const QUEUE_ALERT_THRESHOLD = Number(Deno.env.get("RAG_ALERT_QUEUE_THRESHOLD") ?? "25");
 
@@ -47,6 +49,16 @@ type RawSegment = {
   start_time?: string | null;
   end_time?: string | null;
   text: string;
+};
+
+type QueueJob = {
+  id: string;
+  source_id: string | null;
+  version_id: string;
+  submitted_by: string | null;
+  submitted_at: string;
+  status: string;
+  result_summary: Record<string, unknown> | null;
 };
 
 function chunkTextForEmbedding(text: string, limit = EMBEDDING_CHUNK_CHAR_LIMIT): string[] {
@@ -230,6 +242,31 @@ type SegmentAnalysis = {
   entities?: EntityDescriptor[];
   relationships?: RelationshipDescriptor[];
 };
+
+type SegmentAnalysisWithModel = SegmentAnalysis & { _modelId?: string | null };
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  handler: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+
+  const worker = async () => {
+    while (true) {
+      const current = cursor;
+      if (current >= items.length) break;
+      cursor += 1;
+      results[current] = await handler(items[current], current);
+    }
+  };
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
 async function sendSlackAlert(message: string, details?: Record<string, unknown>) {
   if (!SLACK_WEBHOOK_URL) return;
   try {
@@ -324,7 +361,7 @@ async function listAvailableAnthropicModels(): Promise<AnthropicModelDescriptor[
   }
 }
 
-async function analyzeSegmentWithClaude(segmentText: string, metadata: { sequence: number; total: number; projectName?: string | null; audioName?: string | null }): Promise<SegmentAnalysis | null> {
+async function analyzeSegmentWithClaude(segmentText: string, metadata: { sequence: number; total: number; projectName?: string | null; audioName?: string | null }): Promise<SegmentAnalysisWithModel | null> {
   if (!anthropicEnabled) return null;
 
   const prompt = `
@@ -386,7 +423,7 @@ Segment (sequence ${metadata.sequence}/${metadata.total}):
       const cleaned = text.trim().replace(/^```json/i, "").replace(/```$/, "").trim();
       const parsed = JSON.parse(cleaned);
 
-      const analysis: SegmentAnalysis = {
+      const analysis: SegmentAnalysisWithModel = {
         relevance: {
           dentist: parsed?.relevance?.dentist ?? null,
           dental_assistant: parsed?.relevance?.dental_assistant ?? null,
@@ -401,6 +438,7 @@ Segment (sequence ${metadata.sequence}/${metadata.total}):
         confidence_score: parsed?.confidence_score ?? null,
         entities: Array.isArray(parsed?.entities) ? parsed.entities : [],
         relationships: Array.isArray(parsed?.relationships) ? parsed.relationships : [],
+        _modelId: model,
       };
 
       console.log("Claude analysis result", { model, analysis });
@@ -493,22 +531,51 @@ serve(async (req) => {
     });
   }
 
-  const { data: jobs, error: fetchError } = await supabase
+  const jobs: QueueJob[] = [];
+
+  const { data: resumeJobs, error: resumeError } = await supabase
     .from("rag_ingestion_queue")
-    .select("id, source_id, version_id, submitted_by, submitted_at")
-    .eq("status", "queued")
+    .select("id, source_id, version_id, submitted_by, submitted_at, status, result_summary")
+    .eq("status", "processing")
+    .or("result_summary->progress->>needs_resume.eq.true,result_summary.is.null")
     .order("submitted_at", { ascending: true })
     .limit(BATCH_SIZE);
 
-  if (fetchError) {
-    console.error("Failed to fetch queued jobs", fetchError);
-    return new Response(JSON.stringify({ error: "Failed to load queued jobs", details: fetchError }), {
+  if (resumeError) {
+    console.error("Failed to fetch in-progress jobs needing resume", resumeError);
+    return new Response(JSON.stringify({ error: "Failed to load resume jobs", details: resumeError }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  if (!jobs || jobs.length === 0) {
+  if (resumeJobs && resumeJobs.length > 0) {
+    jobs.push(...resumeJobs);
+  }
+
+  if (jobs.length < BATCH_SIZE) {
+    const remaining = BATCH_SIZE - jobs.length;
+    const { data: queuedJobs, error: queuedError } = await supabase
+      .from("rag_ingestion_queue")
+      .select("id, source_id, version_id, submitted_by, submitted_at, status, result_summary")
+      .eq("status", "queued")
+      .order("submitted_at", { ascending: true })
+      .limit(remaining);
+
+    if (queuedError) {
+      console.error("Failed to fetch queued jobs", queuedError);
+      return new Response(JSON.stringify({ error: "Failed to load queued jobs", details: queuedError }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (queuedJobs && queuedJobs.length > 0) {
+      jobs.push(...queuedJobs);
+    }
+  }
+
+  if (jobs.length === 0) {
     return new Response(JSON.stringify({ ok: true, jobs_processed: 0 }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -527,11 +594,30 @@ serve(async (req) => {
         versionId: job.version_id,
       });
 
+      let summaryRecord: Record<string, any> =
+        job.result_summary && typeof job.result_summary === "object" ? (job.result_summary as Record<string, any>) : {};
+      let progressState: Record<string, any> =
+        summaryRecord.progress && typeof summaryRecord.progress === "object" ? (summaryRecord.progress as Record<string, any>) : {};
+
+      if (progressState.needs_resume) {
+        progressState = { ...progressState, needs_resume: false };
+        summaryRecord = { ...summaryRecord, progress: progressState };
+      }
+
+      const statusFilter = job.status === "processing" ? "processing" : "queued";
+      const updatePayload: Record<string, unknown> = {
+        status: "processing",
+        error_detail: null,
+      };
+      if (Object.keys(summaryRecord).length > 0) {
+        updatePayload.result_summary = summaryRecord;
+      }
+
       const { error: markProcessingError } = await supabase
         .from("rag_ingestion_queue")
-        .update({ status: "processing", error_detail: null })
+        .update(updatePayload)
         .eq("id", job.id)
-        .eq("status", "queued");
+        .eq("status", statusFilter);
 
       if (markProcessingError) {
         console.error("Failed to mark job processing", job.id, markProcessingError);
@@ -575,99 +661,147 @@ serve(async (req) => {
         continue;
       }
 
-      const segmentEmbeddings: Array<number[] | null> = segments.map(() => null);
-      let embeddingModel: string | null = null;
-      let embeddingChunksGenerated = 0;
+      const totalSegments = normalizedSegments.length;
+      const originalCharCount = (version.transcript_text ?? "").length;
+      let chunkCharCount = normalizedSegments.reduce((total, seg) => total + (seg.text?.length ?? 0), 0);
+      let chunkCharDiff = originalCharCount - chunkCharCount;
 
-      if (openai) {
-        for (let idx = 0; idx < segments.length; idx += 1) {
-          const segment = segments[idx];
-          const chunks = chunkTextForEmbedding(segment.text);
-          if (chunks.length === 0) {
-            console.warn("process_rag_queue: segment produced no chunks for embedding", {
-              versionId: version.id,
-              sequence: segment.sequence_number,
-            });
-            continue;
-          }
+      let lastSequenceProcessed = Number(progressState.last_sequence_processed ?? 0);
+      if (!Number.isFinite(lastSequenceProcessed) || lastSequenceProcessed < 0) lastSequenceProcessed = 0;
 
-          const chunkVectors: number[][] = [];
-          try {
-            for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH_SIZE) {
-              const batch = chunks.slice(start, start + EMBEDDING_BATCH_SIZE);
-              const response = await openai.embeddings.create({
-                model: OPENAI_EMBEDDING_MODEL,
-                input: batch,
+      let totalSegmentsProcessed = Number(progressState.segments_processed ?? 0);
+      if (!Number.isFinite(totalSegmentsProcessed) || totalSegmentsProcessed < 0) totalSegmentsProcessed = 0;
+
+      let totalEntitiesLinked = Number(progressState.entities_linked ?? 0);
+      if (!Number.isFinite(totalEntitiesLinked) || totalEntitiesLinked < 0) totalEntitiesLinked = 0;
+
+      let totalRelationshipsLinked = Number(progressState.relationships_linked ?? 0);
+      if (!Number.isFinite(totalRelationshipsLinked) || totalRelationshipsLinked < 0) totalRelationshipsLinked = 0;
+
+      let totalDurationMs = Number(progressState.total_duration_ms ?? 0);
+      if (!Number.isFinite(totalDurationMs) || totalDurationMs < 0) totalDurationMs = 0;
+
+      let embeddingsInserted = Boolean(progressState.embeddings_inserted ?? false);
+      let embeddingsCreated = Number(progressState.embeddings_created ?? 0);
+      if (!Number.isFinite(embeddingsCreated) || embeddingsCreated < 0) embeddingsCreated = 0;
+
+      let embeddingChunksGenerated = Number(progressState.embedding_chunks ?? 0);
+      if (!Number.isFinite(embeddingChunksGenerated) || embeddingChunksGenerated < 0) embeddingChunksGenerated = 0;
+
+      let embeddingModel: string | null = (progressState.embedding_model ?? null) as string | null;
+
+      if (progressState.chunk_char_count) {
+        chunkCharCount = Number(progressState.chunk_char_count);
+        const storedOriginal = Number(progressState.original_char_count ?? originalCharCount);
+        chunkCharDiff = storedOriginal - chunkCharCount;
+      }
+
+      const claudeModels = new Set<string>(
+        Array.isArray(summaryRecord.claude_models)
+          ? (summaryRecord.claude_models as string[])
+          : Array.isArray(progressState.claude_models)
+            ? (progressState.claude_models as string[])
+            : [],
+      );
+
+      const segmentBatchLimit = Math.max(1, SEGMENTS_PER_RUN);
+
+      if (!embeddingsInserted) {
+        const segmentEmbeddings: Array<number[] | null> = normalizedSegments.map(() => null);
+
+        if (openai) {
+          for (let idx = 0; idx < normalizedSegments.length; idx += 1) {
+            const segment = normalizedSegments[idx];
+            const chunks = chunkTextForEmbedding(segment.text);
+            if (chunks.length === 0) {
+              console.warn("process_rag_queue: segment produced no chunks for embedding", {
+                versionId: version.id,
+                sequence: segment.sequence_number,
               });
-              embeddingModel = response.model ?? OPENAI_EMBEDDING_MODEL;
-              response.data.forEach((item) => {
-                embeddingChunksGenerated += 1;
-                chunkVectors.push(item.embedding as number[]);
+              continue;
+            }
+
+            const chunkVectors: number[][] = [];
+            try {
+              for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH_SIZE) {
+                const batch = chunks.slice(start, start + EMBEDDING_BATCH_SIZE);
+                const response = await openai.embeddings.create({
+                  model: OPENAI_EMBEDDING_MODEL,
+                  input: batch,
+                });
+                embeddingModel = response.model ?? OPENAI_EMBEDDING_MODEL;
+                response.data.forEach((item) => {
+                  embeddingChunksGenerated += 1;
+                  chunkVectors.push(item.embedding as number[]);
+                });
+              }
+            } catch (embeddingError) {
+              console.error("process_rag_queue: embedding generation failed", {
+                versionId: version.id,
+                sequence: segment.sequence_number,
+                error: embeddingError,
+              });
+              await sendSlackAlert(":warning: RAG embedding generation failed", {
+                version_id: version.id,
+                segment_sequence: segment.sequence_number,
+                error: formatErrorDetail(embeddingError),
               });
             }
-          } catch (embeddingError) {
-            console.error("process_rag_queue: embedding generation failed", {
-              versionId: version.id,
-              sequence: segment.sequence_number,
-              error: embeddingError,
-            });
-            await sendSlackAlert(":warning: RAG embedding generation failed", {
-              version_id: version.id,
-              segment_sequence: segment.sequence_number,
-              error: formatErrorDetail(embeddingError),
-            });
-          }
 
-          const averaged = averageVectors(chunkVectors);
-          if (averaged) {
-            segmentEmbeddings[idx] = averaged;
+            const averaged = averageVectors(chunkVectors);
+            if (averaged) {
+              segmentEmbeddings[idx] = averaged;
+            }
           }
+        } else {
+          console.warn("process_rag_queue: OPENAI_API_KEY missing, skipping embedding generation");
         }
-      } else {
-        console.warn("process_rag_queue: OPENAI_API_KEY missing, skipping embedding generation");
+
+        const { error: deleteContentError } = await supabase
+          .from("content_segments")
+          .delete()
+          .eq("version_id", version.id);
+
+        if (deleteContentError) {
+          console.error("process_rag_queue: failed to clear previous content segments", job.id, deleteContentError);
+        }
+
+        const contentRows = normalizedSegments.map((segment, idx) => ({
+          source_id: version.source_id,
+          version_id: version.id,
+          segment_text: segment.text,
+          sequence_number: segment.sequence_number,
+          start_timestamp: segment.start_time ?? null,
+          end_timestamp: segment.end_time ?? null,
+          embedding: segmentEmbeddings[idx] ?? null,
+          metadata: {
+            transcript_version_id: version.id,
+            transcript_segment_id: segment.id ?? null,
+          },
+        }));
+
+        const { error: contentError } = await supabase
+          .from("content_segments")
+          .insert(contentRows);
+
+        if (contentError) {
+          await supabase
+            .from("rag_ingestion_queue")
+            .update({ status: "error", error_detail: formatErrorDetail(contentError) })
+            .eq("id", job.id);
+          continue;
+        }
+
+        console.log("process_rag_queue: inserted content segments", {
+          jobId: job.id,
+          inserted: contentRows.length,
+        });
+
+        embeddingsCreated = segmentEmbeddings.filter((embedding) => Array.isArray(embedding)).length;
+        embeddingsInserted = true;
+        chunkCharDiff = originalCharCount - chunkCharCount;
       }
 
-      const { error: deleteContentError } = await supabase
-        .from("content_segments")
-        .delete()
-        .eq("version_id", version.id);
-
-      if (deleteContentError) {
-        console.error("process_rag_queue: failed to clear previous content segments", job.id, deleteContentError);
-      }
-
-      const contentRows = normalizedSegments.map((segment, idx) => ({
-        source_id: version.source_id,
-        version_id: version.id,
-        segment_text: segment.text,
-        sequence_number: segment.sequence_number,
-        start_timestamp: segment.start_time ?? null,
-        end_timestamp: segment.end_time ?? null,
-        embedding: segmentEmbeddings[idx] ?? null,
-        metadata: {
-          transcript_version_id: version.id,
-          transcript_segment_id: segment.id,
-        },
-      }));
-
-      const { error: contentError } = await supabase
-        .from("content_segments")
-        .insert(contentRows);
-
-      if (contentError) {
-        await supabase
-          .from("rag_ingestion_queue")
-          .update({ status: "error", error_detail: formatErrorDetail(contentError) })
-          .eq("id", job.id);
-        continue;
-      }
-
-      console.log("process_rag_queue: inserted content segments", {
-        jobId: job.id,
-        inserted: contentRows.length,
-      });
-
-      // The insert needs segment IDs. Fetch inserted rows to align IDs.
       const { data: insertedSegments, error: fetchInsertedError } = await supabase
         .from("content_segments")
         .select("id, sequence_number")
@@ -682,191 +816,295 @@ serve(async (req) => {
         continue;
       }
 
-      let entitiesLinked = 0;
-      let relationshipsLinked = 0;
+      const normalizedBySequence = new Map<number, RawSegment>();
+      normalizedSegments.forEach((segment) => normalizedBySequence.set(segment.sequence_number, segment));
 
-      for (let idx = 0; idx < insertedSegments.length; idx++) {
-        const inserted = insertedSegments[idx];
-        const segment = normalizedSegments.find((seg) => seg.sequence_number === inserted.sequence_number);
+      const segmentsToProcess = insertedSegments
+        .filter((seg) => seg.sequence_number > lastSequenceProcessed)
+        .sort((a, b) => a.sequence_number - b.sequence_number)
+        .slice(0, segmentBatchLimit);
 
-        if (!segment) {
-          console.warn("process_rag_queue: missing segment text", inserted);
-          continue;
-        }
+      let segmentsProcessedThisRun = segmentsToProcess.length;
+      let runEntitiesLinked = 0;
+      let runRelationshipsLinked = 0;
 
-        let analysis: SegmentAnalysis | null = null;
-        if (anthropicEnabled) {
-          analysis = await analyzeSegmentWithClaude(segment.text, {
-            sequence: segment.sequence_number,
-            total: segments.length,
-            projectName: version.metadata_json?.project_name ?? null,
-            audioName: version.metadata_json?.audio_file_name ?? null,
-          });
-          console.log("process_rag_queue: claude analysis", {
-            jobId: job.id,
-            sequence: segment.sequence_number,
-            analysis,
-          });
-        } else {
-          console.log("process_rag_queue: claude skipped (disabled)", {
-            jobId: job.id,
-            sequence: segment.sequence_number,
-          });
-        }
+      if (segmentsProcessedThisRun > 0) {
+        const claudeSummaries = await mapWithConcurrency(segmentsToProcess, CLAUDE_CONCURRENCY, async (inserted) => {
+          const segment = normalizedBySequence.get(inserted.sequence_number);
+          if (!segment) {
+            console.warn("process_rag_queue: missing segment text", inserted);
+            return { entitiesLinked: 0, relationshipsLinked: 0 };
+          }
 
-        const relevance = analysis?.relevance ?? {};
+          let analysis: SegmentAnalysisWithModel | null = null;
+          if (anthropicEnabled) {
+            analysis = await analyzeSegmentWithClaude(segment.text, {
+              sequence: segment.sequence_number,
+              total: totalSegments,
+              projectName: version.metadata_json?.project_name ?? null,
+              audioName: version.metadata_json?.audio_file_name ?? null,
+            });
+            console.log("process_rag_queue: claude analysis", {
+              jobId: job.id,
+              sequence: segment.sequence_number,
+              analysis,
+            });
+          } else {
+            console.log("process_rag_queue: claude skipped (disabled)", {
+              jobId: job.id,
+              sequence: segment.sequence_number,
+            });
+          }
 
-        await supabase
-          .from("segment_relevance")
-          .upsert(
-            {
-              segment_id: inserted.id,
-              relevance_dentist: normalizeScore(relevance.dentist),
-              relevance_dental_assistant: normalizeScore(relevance.dental_assistant),
-              relevance_hygienist: normalizeScore(relevance.hygienist),
-              relevance_treatment_coordinator: normalizeScore(relevance.treatment_coordinator),
-              relevance_align_rep: normalizeScore(relevance.align_rep),
-              content_type: analysis?.content_type ?? null,
-              clinical_complexity: analysis?.clinical_complexity ?? null,
-              primary_focus: analysis?.primary_focus ?? null,
-              topics: normalizeTopics(analysis?.topics),
-              confidence_score: analysis?.confidence_score ?? null,
-            },
-            { onConflict: "segment_id" },
-          );
+          const relevance = analysis?.relevance ?? {};
 
-        if (analysis?.entities && analysis.entities.length > 0) {
-          for (const entity of analysis.entities) {
-            if (!entity.canonical_name || !entity.entity_type) continue;
-            const key = `${entity.entity_type.toLowerCase()}::${entity.canonical_name.toLowerCase()}`;
+          await supabase
+            .from("segment_relevance")
+            .upsert(
+              {
+                segment_id: inserted.id,
+                relevance_dentist: normalizeScore(relevance.dentist),
+                relevance_dental_assistant: normalizeScore(relevance.dental_assistant),
+                relevance_hygienist: normalizeScore(relevance.hygienist),
+                relevance_treatment_coordinator: normalizeScore(relevance.treatment_coordinator),
+                relevance_align_rep: normalizeScore(relevance.align_rep),
+                content_type: analysis?.content_type ?? null,
+                clinical_complexity: analysis?.clinical_complexity ?? null,
+                primary_focus: analysis?.primary_focus ?? null,
+                topics: normalizeTopics(analysis?.topics),
+                confidence_score: analysis?.confidence_score ?? null,
+              },
+              { onConflict: "segment_id" },
+            );
 
-            let entityId = entityCache.get(key) ?? null;
-            if (!entityId) {
-              const { data: entityRow, error: entityError } = await supabase
-                .from("kg_entities")
+          let localEntitiesLinked = 0;
+          let localRelationshipsLinked = 0;
+
+          if (analysis?.entities && analysis.entities.length > 0) {
+            for (const entity of analysis.entities) {
+              if (!entity.canonical_name || !entity.entity_type) continue;
+              const key = `${entity.entity_type.toLowerCase()}::${entity.canonical_name.toLowerCase()}`;
+
+              let entityId = entityCache.get(key) ?? null;
+              if (!entityId) {
+                const { data: entityRow, error: entityError } = await supabase
+                  .from("kg_entities")
+                  .upsert(
+                    {
+                      entity_type: entity.entity_type,
+                      canonical_name: entity.canonical_name,
+                      aliases: Array.isArray(entity.aliases) ? entity.aliases : [],
+                      definition: entity.definition ?? null,
+                      metadata: {
+                        source: "process_rag_queue",
+                      },
+                    },
+                    { onConflict: "entity_type,canonical_name" },
+                  )
+                  .select("id")
+                  .maybeSingle();
+
+                if (entityError) {
+                  console.error("Failed to upsert entity", entityError);
+                  continue;
+                }
+                entityId = entityRow?.id ?? null;
+                if (entityId) {
+                  entityCache.set(key, entityId);
+                }
+              }
+
+              if (!entityId) continue;
+
+              const { error: segmentEntityError } = await supabase
+                .from("segment_entities")
                 .upsert(
                   {
-                    entity_type: entity.entity_type,
-                    canonical_name: entity.canonical_name,
-                    aliases: Array.isArray(entity.aliases) ? entity.aliases : [],
-                    definition: entity.definition ?? null,
+                    segment_id: inserted.id,
+                    entity_id: entityId,
+                    mention_type: entity.mention_type ?? null,
+                    relevance_score: typeof entity.relevance_score === "number" ? entity.relevance_score : null,
+                    extraction_confidence: typeof entity.confidence === "number" ? entity.confidence : null,
+                  },
+                  { onConflict: "segment_id,entity_id" },
+                );
+
+              if (segmentEntityError) {
+                console.error("Failed to link segment entity", segmentEntityError);
+              } else {
+                localEntitiesLinked += 1;
+              }
+            }
+          }
+
+          if (analysis?.relationships && analysis.relationships.length > 0) {
+            for (const rel of analysis.relationships) {
+              if (!rel.source?.canonical_name || !rel.target?.canonical_name) continue;
+              const sourceKey = `${rel.source.entity_type.toLowerCase()}::${rel.source.canonical_name.toLowerCase()}`;
+              const targetKey = `${rel.target.entity_type.toLowerCase()}::${rel.target.canonical_name.toLowerCase()}`;
+
+              const sourceId = entityCache.get(sourceKey);
+              const targetId = entityCache.get(targetKey);
+              if (!sourceId || !targetId) continue;
+
+              const { error: relationshipError } = await supabase
+                .from("kg_relationships")
+                .upsert(
+                  {
+                    source_entity_id: sourceId,
+                    target_entity_id: targetId,
+                    relationship_type: rel.relationship_type ?? "RELATED_TO",
+                    strength: typeof rel.strength === "number" ? rel.strength : null,
+                    confidence: typeof rel.confidence === "number" ? rel.confidence : null,
+                    context: rel.context ?? null,
+                    source_segment_id: inserted.id,
                     metadata: {
                       source: "process_rag_queue",
                     },
                   },
-                  { onConflict: "entity_type,canonical_name" },
-                )
-                .select("id")
-                .maybeSingle();
+                  { onConflict: "source_entity_id,target_entity_id,relationship_type" },
+                );
 
-              if (entityError) {
-                console.error("Failed to upsert entity", entityError);
-                continue;
-              }
-              entityId = entityRow?.id ?? null;
-              if (entityId) {
-                entityCache.set(key, entityId);
+              if (relationshipError) {
+                console.error("Failed to upsert relationship", relationshipError);
+              } else {
+                localRelationshipsLinked += 1;
               }
             }
-
-            if (!entityId) continue;
-
-            const { error: segmentEntityError } = await supabase
-              .from("segment_entities")
-              .upsert(
-                {
-                  segment_id: inserted.id,
-                  entity_id: entityId,
-                  mention_type: entity.mention_type ?? null,
-                  relevance_score: typeof entity.relevance_score === "number" ? entity.relevance_score : null,
-                  extraction_confidence: typeof entity.confidence === "number" ? entity.confidence : null,
-                },
-                { onConflict: "segment_id,entity_id" },
-              );
-
-            if (segmentEntityError) {
-              console.error("Failed to link segment entity", segmentEntityError);
-            } else {
-              entitiesLinked += 1;
-            }
           }
-        }
 
-        if (analysis?.relationships && analysis.relationships.length > 0) {
-          for (const rel of analysis.relationships) {
-            if (!rel.source?.canonical_name || !rel.target?.canonical_name) continue;
-            const sourceKey = `${rel.source.entity_type.toLowerCase()}::${rel.source.canonical_name.toLowerCase()}`;
-            const targetKey = `${rel.target.entity_type.toLowerCase()}::${rel.target.canonical_name.toLowerCase()}`;
-
-            const sourceId = entityCache.get(sourceKey);
-            const targetId = entityCache.get(targetKey);
-            if (!sourceId || !targetId) continue;
-
-            const { error: relationshipError } = await supabase
-              .from("kg_relationships")
-              .upsert(
-                {
-                  source_entity_id: sourceId,
-                  target_entity_id: targetId,
-                  relationship_type: rel.relationship_type ?? "RELATED_TO",
-                  strength: typeof rel.strength === "number" ? rel.strength : null,
-                  confidence: typeof rel.confidence === "number" ? rel.confidence : null,
-                  context: rel.context ?? null,
-                  source_segment_id: inserted.id,
-                  metadata: {
-                    source: "process_rag_queue",
-                  },
-                },
-                { onConflict: "source_entity_id,target_entity_id,relationship_type" },
-              );
-
-            if (relationshipError) {
-              console.error("Failed to upsert relationship", relationshipError);
-            } else {
-              relationshipsLinked += 1;
-            }
+          if (analysis?._modelId) {
+            claudeModels.add(analysis._modelId);
           }
+
+          return { entitiesLinked: localEntitiesLinked, relationshipsLinked: localRelationshipsLinked };
+        });
+
+        for (const summary of claudeSummaries) {
+          runEntitiesLinked += summary.entitiesLinked;
+          runRelationshipsLinked += summary.relationshipsLinked;
         }
       }
 
-      await supabase
-        .from("content_sources")
-        .update({
-          rag_processed_version_id: job.version_id,
-          transcription_status: "ingested",
-        })
-        .eq("id", version.source_id);
+      totalEntitiesLinked += runEntitiesLinked;
+      totalRelationshipsLinked += runRelationshipsLinked;
+      totalSegmentsProcessed += segmentsProcessedThisRun;
 
-      const embeddingsCreated = segmentEmbeddings.filter((embedding) => Array.isArray(embedding)).length;
+      const updatedLastSequence =
+        segmentsProcessedThisRun > 0
+          ? segmentsToProcess[segmentsProcessedThisRun - 1].sequence_number
+          : lastSequenceProcessed;
 
-      const resultSummary = {
-        segments_processed: insertedSegments.length,
+      lastSequenceProcessed = Math.max(lastSequenceProcessed, updatedLastSequence);
+
+      const runDurationMs = Math.round(performance.now() - jobStart);
+      totalDurationMs += runDurationMs;
+
+      const hasCompleted = lastSequenceProcessed >= totalSegments;
+      const claudeModelsArray = Array.from(claudeModels);
+
+      if (hasCompleted) {
+        await supabase
+          .from("content_sources")
+          .update({
+            rag_processed_version_id: job.version_id,
+            transcription_status: "ingested",
+          })
+          .eq("id", version.source_id);
+
+        const finalSummary = {
+          notes: anthropicEnabled
+            ? "Segment relevance, entities, and relationships generated."
+            : "Segment embeddings generated without Claude analysis.",
+          segments_processed: totalSegments,
+          segments_total: totalSegments,
+          embeddings_created: embeddingsCreated,
+          embedding_chunks: embeddingChunksGenerated,
+          entities_linked: totalEntitiesLinked,
+          relationships_linked: totalRelationshipsLinked,
+          duration_ms: totalDurationMs,
+          processed_version_id: job.version_id,
+          embedding_model: embeddingModel,
+          claude_model: claudeModelsArray.length > 0 ? claudeModelsArray.join(", ") : null,
+          claude_models: claudeModelsArray,
+          chunk_char_count: chunkCharCount,
+          original_char_count: originalCharCount,
+          chunk_char_difference: chunkCharDiff,
+        };
+
+        await supabase
+          .from("rag_ingestion_queue")
+          .update({
+            status: "complete",
+            processed_at: new Date().toISOString(),
+            result_summary: finalSummary,
+          })
+          .eq("id", job.id);
+
+        jobResults.push({ job_id: job.id, segments: totalSegments });
+        console.log("process_rag_queue: job complete", {
+          jobId: job.id,
+          segments: totalSegments,
+          durationMs: totalDurationMs,
+        });
+        continue;
+      }
+
+      const partialSummary = {
+        notes: `Processing… ${totalSegmentsProcessed}/${totalSegments} segments`,
+        status: "processing",
+        segments_processed: totalSegmentsProcessed,
+        segments_total: totalSegments,
         embeddings_created: embeddingsCreated,
         embedding_chunks: embeddingChunksGenerated,
-        entities_linked: entitiesLinked,
-        relationships_linked: relationshipsLinked,
-        duration_ms: Math.round(performance.now() - jobStart),
-        processed_version_id: job.version_id,
+        entities_linked: totalEntitiesLinked,
+        relationships_linked: totalRelationshipsLinked,
         embedding_model: embeddingModel,
-        claude_model: anthropicEnabled ? ANTHROPIC_MODEL : null,
-        notes: anthropicEnabled ? "Segment relevance, entities, and relationships generated." : "Segment embeddings generated without Claude analysis.",
+        claude_model: claudeModelsArray.length > 0 ? claudeModelsArray.join(", ") : null,
+        claude_models: claudeModelsArray,
+        chunk_char_count: chunkCharCount,
+        original_char_count: originalCharCount,
+        chunk_char_difference: chunkCharDiff,
+        progress: {
+          last_sequence_processed: lastSequenceProcessed,
+          total_segments: totalSegments,
+          segments_processed: totalSegmentsProcessed,
+          entities_linked: totalEntitiesLinked,
+          relationships_linked: totalRelationshipsLinked,
+          embeddings_inserted,
+          embeddings_created,
+          embedding_chunks: embeddingChunksGenerated,
+          embedding_model: embeddingModel,
+          claude_models: claudeModelsArray,
+          chunk_char_count: chunkCharCount,
+          original_char_count: originalCharCount,
+          chunk_char_difference: chunkCharDiff,
+          total_duration_ms: totalDurationMs,
+          needs_resume: true,
+          updated_at: new Date().toISOString(),
+        },
       };
 
       await supabase
         .from("rag_ingestion_queue")
         .update({
-          status: "complete",
-          processed_at: new Date().toISOString(),
-          result_summary: resultSummary,
+          status: "processing",
+          processed_at: null,
+          result_summary: partialSummary,
         })
         .eq("id", job.id);
 
-      jobResults.push({ job_id: job.id, segments: insertedSegments.length });
-      console.log("process_rag_queue: job complete", {
-        jobId: job.id,
-        segments: insertedSegments.length,
-        durationMs: resultSummary.duration_ms,
+      jobResults.push({
+        job_id: job.id,
+        segments_processed: totalSegmentsProcessed,
+        remaining_segments: Math.max(totalSegments - totalSegmentsProcessed, 0),
       });
+      console.log("process_rag_queue: job progress", {
+        jobId: job.id,
+        processed: totalSegmentsProcessed,
+        total: totalSegments,
+      });
+      continue;
     } catch (error) {
       console.error("process_rag_queue: job failed", job.id, error);
       await sendSlackAlert(":x: RAG worker job failed", {

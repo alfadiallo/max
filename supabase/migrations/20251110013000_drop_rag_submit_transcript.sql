@@ -1,7 +1,7 @@
--- rag_submit_transcript.sql
--- RPC helper used by submit_to_rag edge function.
+-- Drop legacy rag_submit_transcript overload and recreate canonical definition
 
--- Ensure legacy overload (without p_max_version_id) is removed before creating the current definition.
+begin;
+
 drop function if exists public.rag_submit_transcript(
   text,
   text,
@@ -13,7 +13,7 @@ drop function if exists public.rag_submit_transcript(
   timestamptz
 );
 
-create or replace function rag_submit_transcript(
+create or replace function public.rag_submit_transcript(
   p_version_label text,
   p_transcript_text text,
   p_submitter_id uuid,
@@ -34,7 +34,6 @@ declare
   v_source_metadata jsonb := coalesce(p_source_metadata, '{}'::jsonb);
   v_version_id uuid;
   v_segment_sequence integer := 1;
-  v_segment text;
   v_input_char_count integer := char_length(p_transcript_text);
   v_chunked_char_count integer := 0;
 begin
@@ -43,38 +42,14 @@ begin
   end if;
 
   if p_source_id is null then
-    insert into content_sources (
-      title,
-      metadata,
-      transcription_status,
-      rag_last_submitted_at,
-      rag_processed_version_id
-    ) values (
-      v_source_title,
-      v_source_metadata,
-      'queued_for_rag',
-      p_submitted_at,
-      null
-    )
+    insert into content_sources (title, metadata, transcription_status, rag_last_submitted_at, rag_processed_version_id)
+    values (v_source_title, v_source_metadata, 'queued_for_rag', p_submitted_at, null)
     returning id into v_source_id;
   else
     v_source_id := p_source_id;
 
-    insert into content_sources (
-      id,
-      title,
-      metadata,
-      transcription_status,
-      rag_last_submitted_at,
-      rag_processed_version_id
-    ) values (
-      v_source_id,
-      v_source_title,
-      v_source_metadata,
-      'queued_for_rag',
-      p_submitted_at,
-      null
-    )
+    insert into content_sources (id, title, metadata, transcription_status, rag_last_submitted_at, rag_processed_version_id)
+    values (v_source_id, v_source_title, v_source_metadata, 'queued_for_rag', p_submitted_at, null)
     on conflict (id) do update
       set title = coalesce(excluded.title, content_sources.title),
           metadata = coalesce(content_sources.metadata, '{}'::jsonb) || v_source_metadata,
@@ -111,7 +86,6 @@ begin
 
   delete from transcript_segments where version_id = v_version_id;
 
-  -- Chunk transcript into ~1200 character segments, falling back to the full text if needed.
   <<chunking>>
   declare
     v_max_chunk_chars constant integer := 1200;
@@ -131,7 +105,6 @@ begin
 
       while length(v_remaining) > 0 loop
         if length(v_remaining) > v_max_chunk_chars then
-          -- Find a natural break between 60% and 100% of the limit.
           declare
             v_break_index integer := v_max_chunk_chars;
             v_min_break integer := greatest((v_max_chunk_chars * 6) / 10, 1);
@@ -199,15 +172,8 @@ begin
   end chunking;
 
   if v_segment_sequence = 1 then
-    insert into transcript_segments (
-      version_id,
-      sequence_number,
-      text
-    ) values (
-      v_version_id,
-      1,
-      p_transcript_text
-    );
+    insert into transcript_segments (version_id, sequence_number, text)
+    values (v_version_id, 1, p_transcript_text);
     v_segment_sequence := 2;
     v_chunked_char_count := char_length(p_transcript_text);
   end if;
@@ -251,4 +217,7 @@ begin
   );
 end;
 $$;
+
+commit;
+
 

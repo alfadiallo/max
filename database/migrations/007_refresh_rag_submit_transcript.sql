@@ -1,17 +1,7 @@
--- rag_submit_transcript.sql
--- RPC helper used by submit_to_rag edge function.
+-- 007_refresh_rag_submit_transcript.sql
+-- Ensures rag_submit_transcript function includes character-count verification metadata.
 
--- Ensure legacy overload (without p_max_version_id) is removed before creating the current definition.
-drop function if exists public.rag_submit_transcript(
-  text,
-  text,
-  uuid,
-  uuid,
-  text,
-  jsonb,
-  jsonb,
-  timestamptz
-);
+begin;
 
 create or replace function rag_submit_transcript(
   p_version_label text,
@@ -111,7 +101,6 @@ begin
 
   delete from transcript_segments where version_id = v_version_id;
 
-  -- Chunk transcript into ~1200 character segments, falling back to the full text if needed.
   <<chunking>>
   declare
     v_max_chunk_chars constant integer := 1200;
@@ -131,7 +120,6 @@ begin
 
       while length(v_remaining) > 0 loop
         if length(v_remaining) > v_max_chunk_chars then
-          -- Find a natural break between 60% and 100% of the limit.
           declare
             v_break_index integer := v_max_chunk_chars;
             v_min_break integer := greatest((v_max_chunk_chars * 6) / 10, 1);
@@ -251,4 +239,7 @@ begin
   );
 end;
 $$;
+
+commit;
+
 
