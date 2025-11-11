@@ -27,10 +27,22 @@ export async function POST(request: Request) {
 
     const queryEmbedding = response.data[0].embedding
 
+    console.log('[RAG Search] Calling match_rag_content with:', {
+      query,
+      limit,
+      distance_threshold,
+      embedding_length: queryEmbedding.length,
+    })
+
     const { data: vectorResults, error } = await supabase.rpc('match_rag_content', {
       p_query_embedding: queryEmbedding,
       p_limit: limit,
       p_distance_threshold: distance_threshold,
+    })
+
+    console.log('[RAG Search] match_rag_content returned:', {
+      results_count: vectorResults?.length ?? 0,
+      error: error?.message,
     })
 
     if (error) {

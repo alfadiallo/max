@@ -204,9 +204,12 @@ export default function RAGSearchPage() {
       if (roleFilter !== 'any') {
         const scores = result.relevance_scores || {}
         const score = scores[roleFilter]
+        // Only filter out if score exists and is below threshold
+        // If score is null/undefined (no Claude analysis), include the result
         if (typeof score === 'number' && score < 50) {
           return false
         }
+        // If score is null but roleFilter is set, include it (no Claude data available)
       }
 
       return true
