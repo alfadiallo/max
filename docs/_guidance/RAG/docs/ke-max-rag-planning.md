@@ -65,20 +65,38 @@ Transform Dr. Karla Soto's 8+ hours of dental education video lectures into an i
 
 ---
 
-### Progress Snapshot — 2025-11-08
+### Progress Snapshot — 2025-11-11
 
-- ✅ End-user “Push to Max RAG” workflow now enqueues jobs via `submit_to_rag` (Edits + Final tabs).
-- ✅ Background worker (`process_rag_queue` edge function) processes queued transcripts, generates OpenAI embeddings, and writes segments/relevance records (production migrations `003_rag_core.sql`, `004_rag_version_links.sql` applied 2025-11-08).
-- ✅ Core storage tables deployed (`content_segments`, `segment_relevance`, `kg_entities`, `kg_relationships`, `segment_entities`, `user_queries`) and populated by first processed transcript.
-- ✅ Admin RAG dashboard (`/admin/rag`) surfaces queue metrics, processed content, and recent user queries; main dashboard now groups tiles into Content/Admin sections.
-- ✅ User RAG search UI (`/rag`) powered by the new `match_rag_content` RPC with query logging.
-- ⏳ Knowledge graph enrichment (entity + relationship creation) is stubbed; Phase 3 will integrate Claude extraction for KG writes.
+**✅ MAJOR MILESTONE: RAG SEARCH OPERATIONAL!**
 
-**Validation Notes (2025-11-08)**
-- Pushed sample H-1 transcript → queue row created (`status='queued'`) → worker completed after migrations with `segments_processed` summary, `content_segments` row, and `rag_ingestion_queue.status='complete'`.
-- `/rag` search for “alignment workflow” returns segments sourced from new pipeline; Claude synthesis generates answer using selected chunk IDs.
-- `/admin/rag` dashboard reflects queue item counts, indexed segment totals, and logs the above user query in `user_queries`.
-- Remaining to validate: knowledge-graph entity extraction, persona-specific relevance scoring, automated retry escalation, alerting on scheduled runs.
+- ✅ User-facing search **returning relevant results** at https://www.usemax.io/rag
+- ✅ **115 content segments** indexed and searchable (110 with embeddings)
+- ✅ **Vector similarity search** working with optimized distance threshold (1.2)
+- ✅ **Claude synthesis** generating answers from selected search results
+- ✅ **Query logging** capturing user searches for analytics
+- ✅ End-user "Push to Max RAG" workflow enqueues jobs via `submit_to_rag`
+- ✅ Background worker (`process_rag_queue` edge function) processes queued transcripts with resumable batch processing
+- ✅ Admin RAG dashboard (`/admin/rag`) showing queue activity, content stats, user queries
+- ⏳ Knowledge graph enrichment (Phase 3) - Claude entity/relationship extraction planned
+- ⏳ Railway worker deployment (optional) - for long transcripts without timeout limits
+
+**Key Fixes (2025-11-11):**
+- Fixed vector distance threshold: `0.7` → `0.9` → `1.2` (was too strict, filtering out relevant results)
+- Fixed frontend/API field mismatch: `segment_text` → `chunk_text`
+- Added null safety to prevent crashes on missing data
+- See `docs/RAG_SEARCH_IMPLEMENTATION_COMPLETE.md` for full details
+
+**Validation Notes:**
+- Search query "tell me about dsd" returns 15 relevant results (distances 1.08-1.18)
+- Claude synthesis working with multi-chunk selection and citations
+- Feedback mechanism capturing user ratings (helpful/not helpful)
+- System stable and production-ready for beta users
+
+**Railway Worker Strategy:**
+- Code ready: `workers/rag-processor.ts` (standalone Node.js worker)
+- Decision rule: Deploy if timeout issues >2/month OR processing time >30min/transcript
+- Current status: Not urgent - Supabase Edge Function adequate for current scale
+- See "Railway Worker Strategy" section in completion doc for full implementation plan
 
 ---
 

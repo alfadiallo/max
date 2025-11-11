@@ -445,6 +445,105 @@ LIMIT 20;
 
 ---
 
+## Railway Worker Strategy (Future Implementation)
+
+### Current Architecture Limitation
+
+**Problem:** Supabase Edge Functions have a **90-second hard timeout**  
+**Impact:** Large transcripts (500+ segments) require multiple resumable runs  
+**Current Solution:** Batch processing with resume logic (works but fragile)
+
+### Railway Alternative
+
+**What:** Deploy standalone Node.js worker to Railway  
+**Cost:** $5-10/month  
+**Benefit:** No timeout limits, processes entire transcripts in one run
+
+### When to Implement Railway
+
+**Trigger Conditions:**
+1. Processing transcripts **>2 hours** (200+ segments)
+2. Resumable processing fails **>10% of the time**
+3. Need **real-time ingestion** for user uploads
+4. Batch reprocessing takes **>1 hour** due to timeouts
+
+### Implementation Plan
+
+**Phase 1: Code (Already Exists)**
+- ✅ Worker script: `workers/rag-processor.ts`
+- ✅ Package.json scripts: `worker:rag`
+- ✅ Dependencies: `tsx`, `dotenv`
+- ✅ Documentation: `workers/README.md`
+
+**Phase 2: Deploy to Railway (2 hours)**
+1. Create Railway account and project
+2. Link GitHub repository
+3. Configure build command: `npm install`
+4. Configure start command: `npm run worker:rag`
+5. Add environment variables:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `OPENAI_API_KEY`
+   - `ANTHROPIC_API_KEY`
+   - `RAG_ENABLE_CLAUDE_ANALYSIS=true`
+   - `RAG_SEGMENTS_PER_RUN=50` (higher limit without timeouts)
+
+**Phase 3: Test & Validate (1 hour)**
+1. Upload test transcript (500+ segments)
+2. Monitor Railway logs
+3. Verify completion without timeouts
+4. Compare performance vs Supabase Edge Function
+
+**Phase 4: Production Cutover (30 minutes)**
+1. Update admin UI to use Railway worker
+2. Disable Supabase Edge Function cron
+3. Monitor Railway resource usage
+4. Set up alerts for worker failures
+
+### Architecture Comparison
+
+**Current (Supabase Edge Function):**
+```
+Transcript Upload → Queue Job → Edge Function (90s limit)
+                                      ↓
+                                Timeout? → Resume next run
+                                      ↓
+                                Process 5-10 segments
+                                      ↓
+                                Repeat until complete
+```
+
+**Future (Railway Worker):**
+```
+Transcript Upload → Queue Job → Railway Worker (no limit)
+                                      ↓
+                                Process ALL segments
+                                      ↓
+                                Complete in one run
+```
+
+### Cost-Benefit Analysis
+
+**Costs:**
+- Railway: $5-10/month
+- Development time: 3-4 hours
+
+**Benefits:**
+- ✅ No timeout issues
+- ✅ Faster processing (10x for large transcripts)
+- ✅ Simpler code (no resume logic)
+- ✅ Better reliability
+- ✅ Easier debugging (continuous logs)
+
+**Decision Rule:**
+- If timeout issues occur **>2 times/month** → Implement Railway
+- If processing time **>30 minutes/transcript** → Implement Railway
+- If user uploads need **<5 minute turnaround** → Implement Railway
+
+**Current Status:** ⏸️ **Not urgent** - Supabase Edge Function working adequately for current scale
+
+---
+
 ## Next Steps
 
 ### Immediate (This Week)
