@@ -14,7 +14,8 @@ declare const Deno: {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const BATCH_SIZE = Number(Deno.env.get("RAG_WORKER_BATCH") ?? "1");
-const SEGMENTS_PER_RUN = Number(Deno.env.get("RAG_SEGMENTS_PER_RUN") ?? "10");
+const SEGMENTS_PER_RUN = Number(Deno.env.get("RAG_SEGMENTS_PER_RUN") ?? "5");
+const MAX_RUNTIME_MS = Number(Deno.env.get("RAG_MAX_RUNTIME_MS") ?? "90000"); // 90 seconds
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 const OPENAI_EMBEDDING_MODEL = Deno.env.get("RAG_EMBEDDING_MODEL") ?? "text-embedding-3-small";
 const EMBEDDING_CHUNK_CHAR_LIMIT = Number(Deno.env.get("RAG_EMBEDDING_CHAR_LIMIT") ?? "3200");
@@ -47,6 +48,7 @@ console.log("process_rag_queue: configuration", {
   claudeAnalysis: ENABLE_CLAUDE_ANALYSIS ? "enabled" : "disabled (fast mode)",
   segmentsPerRun: SEGMENTS_PER_RUN,
   embeddingCharLimit: EMBEDDING_CHUNK_CHAR_LIMIT,
+  maxRuntimeMs: MAX_RUNTIME_MS,
 });
 
 type RawSegment = {
@@ -859,6 +861,84 @@ serve(async (req) => {
           totalSegmentsProcessed,
           totalSegments,
         });
+
+        // Check if we should exit early to avoid timeout
+        const elapsedMs = Math.round(performance.now() - invocationStartedAt);
+        if (elapsedMs > MAX_RUNTIME_MS * 0.75) {
+          console.log("process_rag_queue: approaching timeout, exiting early after embeddings", {
+            jobId: job.id,
+            elapsedMs,
+            maxRuntimeMs: MAX_RUNTIME_MS,
+          });
+          
+          // Update progress and exit
+          const partialSummary = {
+            notes: `Processing… ${totalSegmentsProcessed}/${totalSegments} segments (embeddings)`,
+            status: "processing",
+            segments_processed: totalSegmentsProcessed,
+            segments_total: totalSegments,
+            embeddings_created: embeddingsCreated,
+            embedding_chunks: embeddingChunksGenerated,
+            entities_linked: totalEntitiesLinked,
+            relationships_linked: totalRelationshipsLinked,
+            duration_ms: elapsedMs,
+            embedding_model: embeddingModel,
+            claude_models: [],
+            chunk_char_count: chunkCharCount,
+            original_char_count: originalCharCount,
+            chunk_char_difference: chunkCharDiff,
+            job_id: job.id,
+            version_id: version.id,
+            source_id: version.source_id,
+            progress: {
+              last_sequence_processed: lastSequenceProcessed,
+              total_segments: totalSegments,
+              segments_processed: totalSegmentsProcessed,
+              entities_linked: totalEntitiesLinked,
+              relationships_linked: totalRelationshipsLinked,
+              embeddings_inserted: embeddingsInserted,
+              embeddings_created: embeddingsCreated,
+              embedding_chunks: embeddingChunksGenerated,
+              embedding_model: embeddingModel,
+              claude_models: [],
+              chunk_char_count: chunkCharCount,
+              original_char_count: originalCharCount,
+              chunk_char_difference: chunkCharDiff,
+              total_duration_ms: elapsedMs,
+              needs_resume: true,
+              updated_at: new Date().toISOString(),
+              job_id: job.id,
+              version_id: version.id,
+              source_id: version.source_id,
+            },
+          };
+
+          await supabase
+            .from("rag_ingestion_queue")
+            .update({
+              status: "processing",
+              processed_at: null,
+              result_summary: partialSummary,
+            })
+            .eq("id", job.id);
+
+          jobResults.push({
+            job_id: job.id,
+            segments_processed: totalSegmentsProcessed,
+            remaining_segments: totalSegments - totalSegmentsProcessed,
+          });
+
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              jobs_processed: jobResults.length,
+              summary: jobResults,
+              duration_ms: elapsedMs,
+              early_exit: true,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
       } else if (hasExistingSegments) {
         console.log("process_rag_queue: embeddings already present, skipping regeneration", {
           jobId: job.id,
