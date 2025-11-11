@@ -7,7 +7,7 @@ interface RAGResult {
   chunk_id: string
   source_id: string | null
   version_id: string | null
-  segment_text: string
+  chunk_text: string
   start_timestamp: string | null
   end_timestamp: string | null
   created_at: string | null
@@ -393,7 +393,7 @@ export default function RAGSearchPage() {
                     </div>
 
                     <div className="text-gray-700 mb-4 leading-relaxed">
-                      {expandedChunks.has(result.chunk_id) ? result.segment_text : `${result.segment_text.slice(0, 320)}…`}
+                      {expandedChunks.has(result.chunk_id) ? result.chunk_text : `${result.chunk_text.slice(0, 320)}…`}
                       <button
                         onClick={() => toggleExpanded(result.chunk_id)}
                         className="text-purple-600 hover:text-purple-800 ml-2 text-sm font-medium inline-flex items-center"
