@@ -37,20 +37,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white dark:bg-gray-800 rounded-lg shadow">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
         <div>
-          <h2 className="text-3xl font-bold text-center dark:text-gray-100">Max</h2>
-          <p className="mt-2 text-center text-gray-600 dark:text-gray-400">Sign in to your account</p>
+          <h2 className="text-3xl font-bold text-center text-keyelements-text">KEY ELEMENTS</h2>
+          <p className="mt-2 text-center text-keyelements-text-light">Sign in to your account</p>
         </div>
         <form onSubmit={handleLogin} className="mt-8 space-y-6">
           {error && (
-            <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
               {error}
             </div>
           )}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label htmlFor="email" className="block text-sm font-medium text-keyelements-text">
               Email address
             </label>
             <input
@@ -59,11 +59,11 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-keyelements-text focus:outline-none focus:ring-brand-pink focus:border-brand-pink"
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label htmlFor="password" className="block text-sm font-medium text-keyelements-text">
               Password
             </label>
             <input
@@ -72,12 +72,12 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-keyelements-text focus:outline-none focus:ring-brand-pink focus:border-brand-pink"
             />
           </div>
           <div className="flex items-center justify-between">
             <div className="text-sm">
-              <a href="/forgot-password" className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500">
+              <a href="/forgot-password" className="font-medium text-brand-pink hover:text-brand-pink-dark">
                 Forgot your password?
               </a>
             </div>
@@ -85,14 +85,14 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-brand-pink hover:bg-brand-pink-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-pink disabled:opacity-50"
           >
             {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
-        <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+        <p className="text-center text-sm text-keyelements-text-light">
           Don't have an account?{' '}
-          <a href="/register" className="text-blue-600 dark:text-blue-400 hover:text-blue-500">
+          <a href="/register" className="text-brand-pink hover:text-brand-pink-dark">
             Sign up
           </a>
         </p>

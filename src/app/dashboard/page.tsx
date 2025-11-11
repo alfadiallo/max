@@ -137,13 +137,13 @@ export default function DashboardPage() {
   ]
 
   const variantClasses: Record<LinkVariant, string> = {
-    default: 'bg-white shadow hover:shadow-lg dark:bg-gray-950 dark:border dark:border-gray-800',
+    default: 'bg-white shadow hover:shadow-lg border border-gray-200',
     highlight:
-      'bg-white shadow hover:shadow-lg border-2 border-purple-300 dark:bg-gray-950 dark:border-purple-400/40',
+      'bg-white shadow hover:shadow-lg border-2 border-brand-pink',
     green:
-      'bg-white shadow hover:shadow-lg border-2 border-green-300 dark:bg-gray-950 dark:border-green-500',
+      'bg-white shadow hover:shadow-lg border-2 border-green-400',
     blue:
-      'bg-white shadow hover:shadow-lg border-2 border-blue-300 dark:bg-gray-950 dark:border-blue-500',
+      'bg-white shadow hover:shadow-lg border-2 border-blue-400',
   }
 
   const LinkCard = ({ link }: { link: DashboardLink }) => {
@@ -155,25 +155,25 @@ export default function DashboardPage() {
         href={link.href}
         className={`rounded-lg p-6 transition ${variantClasses[variant]}`}
       >
-        <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 dark:text-gray-100">
+        <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 text-keyelements-text">
           <Icon className="h-5 w-5" />
           {link.title}
         </h3>
-        <p className="text-gray-600 dark:text-gray-300">{link.description}</p>
+        <p className="text-keyelements-text-light">{link.description}</p>
       </a>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50">
       {/* Global header renders via RootLayout */}
 
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div className="mt-8 space-y-10">
           <section>
             <div className="mb-4">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Content</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <h2 className="text-xl font-semibold text-keyelements-text">Content</h2>
+              <p className="text-sm text-keyelements-text-light">
                 Access the core tools for managing, reviewing, and searching knowledge.
               </p>
             </div>
@@ -187,8 +187,8 @@ export default function DashboardPage() {
           {isAdmin && (
             <section>
               <div className="mb-4">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Admin</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <h2 className="text-xl font-semibold text-keyelements-text">Admin</h2>
+                <p className="text-sm text-keyelements-text-light">
                   Administrative utilities for ingestion, monitoring, and user management.
                 </p>
               </div>

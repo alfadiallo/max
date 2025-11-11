@@ -81,7 +81,7 @@ export default function AudioPlayer({ audioUrl, fileName }: AudioPlayerProps) {
       <div className="flex items-center gap-4">
         <button
           onClick={togglePlay}
-          className="flex items-center justify-center w-12 h-12 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition"
+          className="flex items-center justify-center w-12 h-12 bg-brand-pink text-white rounded-full hover:bg-blue-700 transition"
         >
           {playing ? (
             <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
@@ -101,14 +101,14 @@ export default function AudioPlayer({ audioUrl, fileName }: AudioPlayerProps) {
             max={duration || 0}
             value={currentTime}
             onChange={handleSeek}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
             style={{
               background: `linear-gradient(to right, #2563eb 0%, #2563eb ${(currentTime / duration) * 100}%, ${isDark ? '#374151' : '#e5e7eb'} ${(currentTime / duration) * 100}%, ${isDark ? '#374151' : '#e5e7eb'} 100%)`
             }}
           />
         </div>
 
-        <span className="text-sm text-gray-600 min-w-[80px] text-right dark:text-gray-300">
+        <span className="text-sm text-gray-600 min-w-[80px] text-right">
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
       </div>

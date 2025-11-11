@@ -7,6 +7,7 @@ import Link from 'next/link'
 import AudioUpload from '@/components/audio/AudioUpload'
 import AudioPlayer from '@/components/audio/AudioPlayer'
 import TranscriptionView from '@/components/audio/TranscriptionView'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 
 interface Project {
   id: string
@@ -277,33 +278,33 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50">
       {/* Global header renders via RootLayout */}
       
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div className="mb-4">
           <Link 
             href="/projects" 
-            className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center gap-2"
+            className="text-brand-pink hover:text-brand-pink-dark inline-flex items-center gap-2"
           >
-            ← Back to Projects
+            <ArrowLeft className="inline-block w-4 h-4 mr-1" />Back to Projects
           </Link>
         </div>
         <div className="flex justify-end mb-4">
           <button 
             onClick={() => setShowUpload(!showUpload)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+            className="px-4 py-2 bg-brand-pink text-white rounded-lg hover:bg-brand-pink-dark"
           >
             {showUpload ? '✕ Cancel' : '+ Upload Audio'}
           </button>
         </div>
-        <div className="bg-white shadow rounded-lg p-6 mb-6 dark:bg-gray-950 dark:border dark:border-gray-800">
-          <h2 className="text-lg font-semibold mb-4 dark:text-gray-100">Project Details</h2>
+        <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <h2 className="text-lg font-semibold mb-4">Project Details</h2>
           <div className="space-y-2">
-            <p className="text-gray-600 dark:text-gray-300">
+            <p className="text-gray-600">
               <span className="font-medium">Type:</span> {project.project_type?.name}
             </p>
-            <p className="text-gray-600 dark:text-gray-300">
+            <p className="text-gray-600">
               <span className="font-medium">Created:</span> {new Date(project.created_at).toLocaleDateString()}
             </p>
           </div>
@@ -311,8 +312,8 @@ export default function ProjectDetailPage() {
 
         {/* Upload Section */}
         {showUpload && (
-          <div className="bg-white shadow rounded-lg p-6 mb-6 dark:bg-gray-950 dark:border dark:border-gray-800">
-            <h2 className="text-lg font-semibold mb-4 dark:text-gray-100">Upload Audio</h2>
+          <div className="bg-white shadow rounded-lg p-6 mb-6">
+            <h2 className="text-lg font-semibold mb-4">Upload Audio</h2>
             <AudioUpload 
               projectId={projectId} 
               onUploadComplete={async () => {
@@ -323,22 +324,22 @@ export default function ProjectDetailPage() {
           </div>
         )}
 
-        <div className="bg-white shadow rounded-lg p-6 dark:bg-gray-950 dark:border dark:border-gray-800">
-          <h2 className="text-lg font-semibold mb-4 dark:text-gray-100">Audio Files</h2>
+        <div className="bg-white shadow rounded-lg p-6">
+          <h2 className="text-lg font-semibold mb-4">Audio Files</h2>
 
           {audioFiles.length === 0 && !showUpload ? (
             <div className="text-center py-8">
-              <p className="text-gray-600 mb-4 dark:text-gray-300">No audio files yet</p>
+              <p className="text-gray-600 mb-4">No audio files yet</p>
               <button 
               onClick={() => setShowUpload(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              className="px-4 py-2 bg-brand-pink text-white rounded-lg hover:bg-brand-pink-dark">
                 Upload First Audio File
               </button>
             </div>
           ) : (
             <div className="space-y-4">
               {audioFiles.map((file) => (
-                <div key={file.id} className="border border-gray-200 rounded-lg p-4 dark:border-gray-700">
+                <div key={file.id} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex-1">
                       {editingDisplayName === file.id ? (
@@ -347,7 +348,7 @@ export default function ProjectDetailPage() {
                             type="text"
                             value={editingValue}
                             onChange={(e) => setEditingValue(e.target.value)}
-                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
                             onKeyPress={(e) => {
                               if (e.key === 'Enter') handleSaveDisplayName(file.id)
                               if (e.key === 'Escape') handleCancelEdit()
@@ -361,24 +362,24 @@ export default function ProjectDetailPage() {
                           </button>
                           <button
                             onClick={handleCancelEdit}
-                            className="px-3 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
+                            className="px-3 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400:bg-gray-500"
                           >
                             ✕
                           </button>
                         </div>
                       ) : (
-                        <p className="font-medium cursor-pointer hover:text-blue-600 dark:text-gray-100 dark:hover:text-blue-400" onClick={() => handleEditDisplayName(file)}>
+                        <p className="font-medium cursor-pointer hover:text-brand-pink" onClick={() => handleEditDisplayName(file)}>
                           {file.display_name || file.file_name}
                         </p>
                       )}
-                      <p className="text-xs text-gray-400 mt-1 dark:text-gray-400">
+                      <p className="text-xs text-gray-400 mt-1">
                         File name: {file.file_name}
                       </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                      <p className="text-sm text-gray-600">
                         {(file.file_size_bytes / 1024 / 1024).toFixed(2)} MB
                         {file.duration_seconds && ` • ${Math.floor(file.duration_seconds)}s`}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">
+                      <p className="text-xs text-gray-500 mt-1">
                         Uploaded: {new Date(file.created_at).toLocaleString()}
                       </p>
                     </div>
@@ -394,7 +395,7 @@ export default function ProjectDetailPage() {
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
                         )}
-                        {transcribingFiles.has(file.id) ? 'Transcribing...' : 'Transcribe →'}
+                        {transcribingFiles.has(file.id) ? 'Transcribing...' : <>Transcribe <ArrowRight className="inline-block w-4 h-4 ml-1" /></>}
                       </button>
                       <button 
                         onClick={() => handleDelete(file)}
@@ -405,7 +406,7 @@ export default function ProjectDetailPage() {
                     </div>
                   </div>
                   {transcribingFiles.has(file.id) && (
-                    <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700 dark:bg-blue-900 dark:border-blue-700 dark:text-blue-200">
+                    <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-pink-50 border border-pink-200 rounded text-sm text-brand-pink">
                       <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>

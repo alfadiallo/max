@@ -66,7 +66,7 @@ export default function CorrectionsDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
         {/* Global header renders via RootLayout */}
 
@@ -221,7 +221,7 @@ export default function CorrectionsDashboard() {
                   <p className="mt-1 text-sm text-gray-900">
                     ...{selectedCorrection.context_before} 
                     <span className="font-bold text-red-600 line-through">{selectedCorrection.original_text}</span>
-                    <span className="font-bold text-green-600"> → {selectedCorrection.corrected_text}</span>
+                    <ArrowRight className="inline-block w-4 h-4 mx-1 text-green-600" /><span className="font-bold text-green-600">{selectedCorrection.corrected_text}</span>
                     {selectedCorrection.context_after}...
                   </p>
                 </div>
@@ -234,7 +234,7 @@ export default function CorrectionsDashboard() {
               </div>
               <button
                 onClick={() => setSelectedCorrection(null)}
-                className="mt-6 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="mt-6 px-4 py-2 bg-brand-pink text-white rounded hover:bg-brand-pink-dark"
               >
                 Close
               </button>

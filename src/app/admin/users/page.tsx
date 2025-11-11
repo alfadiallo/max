@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { ArrowLeft } from 'lucide-react'
 
 interface User {
   id: string
@@ -146,32 +147,32 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50">
       <main className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <a href="/dashboard" className="text-blue-600 hover:text-blue-700 dark:text-blue-400">
-            ← Back to Dashboard
+          <a href="/dashboard" className="text-blue-600 hover:text-blue-700">
+            <ArrowLeft className="inline-block w-4 h-4 mr-1" />Back to Dashboard
           </a>
         </div>
 
-        <h1 className="text-3xl font-bold mb-8 dark:text-gray-100">Manage Users</h1>
+        <h1 className="text-3xl font-bold mb-8">Manage Users</h1>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 dark:text-gray-100">Invite New User</h2>
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">Invite New User</h2>
           
           <form onSubmit={handleInvite} className="space-y-4">
             {inviteMessage && (
               <div className={`p-4 rounded-lg ${
                 inviteMessage.type === 'success' 
-                  ? 'bg-green-50 border border-green-200 text-green-700 dark:bg-green-900 dark:border-green-700 dark:text-green-200'
-                  : 'bg-red-50 border border-red-200 text-red-700 dark:bg-red-900 dark:border-red-700 dark:text-red-200'
+                  ? 'bg-green-50 border border-green-200 text-green-700'
+                  : 'bg-red-50 border border-red-200 text-red-700'
               }`}>
                 {inviteMessage.text}
               </div>
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-1 dark:text-gray-200">
+              <label htmlFor="email" className="block text-sm font-medium mb-1">
                 Email
               </label>
               <input
@@ -180,13 +181,13 @@ export default function AdminUsersPage() {
                 required
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="user@example.com"
               />
             </div>
 
             <div>
-              <label htmlFor="name" className="block text-sm font-medium mb-1 dark:text-gray-200">
+              <label htmlFor="name" className="block text-sm font-medium mb-1">
                 Full Name
               </label>
               <input
@@ -195,20 +196,20 @@ export default function AdminUsersPage() {
                 required
                 value={inviteName}
                 onChange={(e) => setInviteName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="John Doe"
               />
             </div>
 
             <div>
-              <label htmlFor="role" className="block text-sm font-medium mb-1 dark:text-gray-200">
+              <label htmlFor="role" className="block text-sm font-medium mb-1">
                 Role
               </label>
               <select
                 id="role"
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="Editor">Editor</option>
                 <option value="Admin">Admin</option>
@@ -218,65 +219,65 @@ export default function AdminUsersPage() {
             <button
               type="submit"
               disabled={inviteLoading}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-2 bg-brand-pink text-white rounded-lg hover:bg-brand-pink-dark disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {inviteLoading ? 'Inviting...' : 'Send Invitation'}
             </button>
           </form>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold dark:text-gray-100">Existing Users</h2>
+            <h2 className="text-xl font-semibold">Existing Users</h2>
             <button
               onClick={loadUsers}
               disabled={usersLoading}
-              className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50"
+              className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300:bg-gray-600 disabled:opacity-50"
             >
               {usersLoading ? 'Loading...' : 'Refresh'}
             </button>
           </div>
 
           {usersLoading ? (
-            <p className="text-gray-600 dark:text-gray-400">Loading users...</p>
+            <p className="text-gray-600">Loading users...</p>
           ) : users.length === 0 ? (
-            <p className="text-gray-600 dark:text-gray-400">No users found.</p>
+            <p className="text-gray-600">No users found.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="border-b dark:border-gray-700">
-                    <th className="py-2 px-4 dark:text-gray-200">Email</th>
-                    <th className="py-2 px-4 dark:text-gray-200">Full Name</th>
-                    <th className="py-2 px-4 dark:text-gray-200">Role</th>
-                    <th className="py-2 px-4 dark:text-gray-200">Status</th>
-                    <th className="py-2 px-4 dark:text-gray-200">Actions</th>
+                  <tr className="border-b">
+                    <th className="py-2 px-4">Email</th>
+                    <th className="py-2 px-4">Full Name</th>
+                    <th className="py-2 px-4">Role</th>
+                    <th className="py-2 px-4">Status</th>
+                    <th className="py-2 px-4">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map((u) => (
-                    <tr key={u.id} className="border-b dark:border-gray-700">
-                      <td className="py-2 px-4 dark:text-gray-300">{u.email}</td>
-                      <td className="py-2 px-4 dark:text-gray-300">{u.full_name || '-'}</td>
+                    <tr key={u.id} className="border-b">
+                      <td className="py-2 px-4">{u.email}</td>
+                      <td className="py-2 px-4">{u.full_name || '-'}</td>
                       <td className="py-2 px-4">
                         <span className={`inline-block px-2 py-1 rounded text-xs ${
                           u.role === 'Admin' 
-                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                            ? 'bg-purple-100 text-purple-800'
                             : u.role === 'Editor'
-                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                            : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-600'
                         }`}>
                           {u.role || 'No Role'}
                         </span>
                         {!u.in_max_users && (
-                          <span className="ml-2 text-xs text-orange-600 dark:text-orange-400">(Not in max_users)</span>
+                          <span className="ml-2 text-xs text-orange-600">(Not in max_users)</span>
                         )}
                       </td>
-                      <td className="py-2 px-4 dark:text-gray-300">
+                      <td className="py-2 px-4">
                         {u.email_confirmed_at ? (
-                          <span className="text-green-600 dark:text-green-400 text-sm">Confirmed</span>
+                          <span className="text-green-600 text-sm">Confirmed</span>
                         ) : (
-                          <span className="text-orange-600 dark:text-orange-400 text-sm">Pending</span>
+                          <span className="text-orange-600 text-sm">Pending</span>
                         )}
                       </td>
                       <td className="py-2 px-4">
@@ -285,7 +286,7 @@ export default function AdminUsersPage() {
                             <button
                               onClick={() => handleUpdateRole(u.id, 'Editor', u.full_name)}
                               disabled={updatingUserId === u.id}
-                              className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                              className="px-3 py-1 text-xs bg-brand-pink text-white rounded hover:bg-brand-pink-dark disabled:opacity-50"
                             >
                               {updatingUserId === u.id ? 'Updating...' : 'Set as Editor'}
                             </button>
@@ -302,7 +303,7 @@ export default function AdminUsersPage() {
                             value={u.role || ''}
                             onChange={(e) => handleUpdateRole(u.id, e.target.value, u.full_name)}
                             disabled={updatingUserId === u.id}
-                            className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
+                            className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-50"
                           >
                             <option value="Editor">Editor</option>
                             <option value="Admin">Admin</option>
@@ -316,15 +317,15 @@ export default function AdminUsersPage() {
             </div>
           )}
 
-          <div className="mt-4 pt-4 border-t dark:border-gray-700">
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+          <div className="mt-4 pt-4 border-t">
+            <p className="text-sm text-gray-600 mb-2">
               You can also manage users directly from the Supabase dashboard:
             </p>
             <a 
               href="https://app.supabase.com/project/sutzvbpsflwqdzcjtscr/auth/users" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 text-sm"
+              className="text-blue-600 hover:text-blue-700 text-sm"
             >
               Open Supabase Users →
             </a>

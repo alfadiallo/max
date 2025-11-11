@@ -156,7 +156,7 @@ export default async function RAGDashboardPage() {
 
   const cards = [
     { title: 'Queued Jobs', count: queuedCount.count ?? 0, tint: 'bg-yellow-100 text-yellow-800' },
-    { title: 'Processing', count: processingCount.count ?? 0, tint: 'bg-blue-100 text-blue-800' },
+    { title: 'Processing', count: processingCount.count ?? 0, tint: 'bg-pink-100 text-brand-pink-dark' },
     { title: 'Errors', count: errorCount.count ?? 0, tint: 'bg-red-100 text-red-800' },
     { title: 'Completed', count: completeCount.count ?? 0, tint: 'bg-green-100 text-green-800' },
     { title: 'Indexed Segments', count: contentSegmentsCount.count ?? 0, tint: 'bg-slate-100 text-slate-800' },
@@ -187,9 +187,9 @@ export default async function RAGDashboardPage() {
     if (job.result_summary) {
       const summary = job.result_summary
       return (
-        <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
+        <div className="text-sm text-gray-700 space-y-1">
           <div>{summary.notes || 'Processed'}</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 flex flex-wrap gap-2">
+          <div className="text-xs text-gray-500 flex flex-wrap gap-2">
             {summary.segments_processed !== undefined && (
               <span>{summary.segments_processed} segments</span>
             )}
@@ -226,40 +226,40 @@ export default async function RAGDashboardPage() {
         // ignore parse errors and use raw string
       }
 
-      return <span className="text-sm text-red-600 dark:text-red-400">Error: {message}</span>
+      return <span className="text-sm text-red-600">Error: {message}</span>
     }
 
     return <span className="text-sm text-gray-400">—</span>
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50">
       <main className="max-w-7xl mx-auto py-10 px-6 space-y-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Max RAG Dashboard</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <h1 className="text-2xl font-semibold text-gray-900">Max RAG Dashboard</h1>
+            <p className="text-sm text-gray-600 mt-1">
               Monitor ingestion jobs, indexed content, and user search activity.
             </p>
           </div>
         <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/projects"
-              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-700 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 dark:bg-gray-950 dark:text-blue-300 dark:border-blue-700"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-pink border border-pink-200 rounded-lg bg-white hover:bg-pink-50"
             >
-              ← Back to Projects
+              <ArrowLeft className="inline-block w-4 h-4" /> Back to Projects
             </Link>
               <Link
                 href="/admin/rag/segments"
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 border border-purple-200 rounded-lg bg-white hover:bg-purple-50 dark:bg-gray-950 dark:text-purple-300 dark:border-purple-700"
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 border border-purple-200 rounded-lg bg-white hover:bg-purple-50"
               >
-                View Segments →
+                View Segments <ArrowRight className="inline-block w-4 h-4" />
               </Link>
               <Link
                 href="/admin/rag/queries"
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-green-700 border border-green-200 rounded-lg bg-white hover:bg-green-50 dark:bg-gray-950 dark:text-green-300 dark:border-green-700"
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-green-700 border border-green-200 rounded-lg bg-white hover:bg-green-50"
               >
-                View Queries →
+                View Queries <ArrowRight className="inline-block w-4 h-4" />
               </Link>
               <RunWorkerButton />
           </div>
@@ -267,40 +267,40 @@ export default async function RAGDashboardPage() {
 
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {cards.map((card) => (
-            <div key={card.title} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:bg-gray-950 dark:border-gray-800">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{card.title}</p>
+            <div key={card.title} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{card.title}</p>
               <p className={`mt-2 text-2xl font-semibold ${card.tint}`}>{card.count.toLocaleString()}</p>
             </div>
           ))}
         </section>
 
-        <section className="bg-white rounded-xl border border-gray-200 shadow-sm dark:bg-gray-950 dark:border-gray-800">
-          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Recent Queue Activity</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Last {queue.length} submissions to the ingestion pipeline.</p>
+        <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div className="px-5 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Recent Queue Activity</h2>
+            <p className="text-sm text-gray-600">Last {queue.length} submissions to the ingestion pipeline.</p>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-900">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Source</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Submitted</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Processed</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Summary</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Actions</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Source</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Submitted</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Processed</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Summary</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+              <tbody className="divide-y divide-gray-200">
                 {queue.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
                       No ingestion jobs yet.
                     </td>
                   </tr>
                 ) : (
                   queue.map((job) => (
-                    <tr key={job.id} className="bg-white dark:bg-gray-950">
+                    <tr key={job.id} className="bg-white">
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${statusTint(job.status)}`}>
                           {job.status.toUpperCase()}
@@ -310,10 +310,10 @@ export default async function RAGDashboardPage() {
                         {(() => {
                           const display = getSourceDisplay(job)
                           return (
-                            <div className="text-sm text-gray-800 dark:text-gray-200">
+                            <div className="text-sm text-gray-800">
                               {display.title}
                               {display.subtitle && (
-                                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                <div className="text-xs text-gray-500 mt-0.5">
                                   {display.subtitle}
                                 </div>
                               )}
@@ -321,16 +321,16 @@ export default async function RAGDashboardPage() {
                           )
                         })()}
                       </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200">
+                      <td className="px-4 py-3 text-gray-700">
                         {new Date(job.submitted_at).toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200">
+                      <td className="px-4 py-3 text-gray-700">
                         {job.processed_at ? new Date(job.processed_at).toLocaleString() : '—'}
                       </td>
                       <td className="px-4 py-3">
                         {renderSummary(job)}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                      <td className="px-4 py-3 text-sm text-gray-600">
                         <QueueActions jobId={job.id} jobStatus={job.status} />
                       </td>
                     </tr>
@@ -341,41 +341,41 @@ export default async function RAGDashboardPage() {
           </div>
         </section>
 
-        <section className="bg-white rounded-xl border border-gray-200 shadow-sm dark:bg-gray-950 dark:border-gray-800">
-          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Recent User Queries</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Latest questions asked against the RAG search endpoint.</p>
+        <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div className="px-5 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Recent User Queries</h2>
+            <p className="text-sm text-gray-600">Latest questions asked against the RAG search endpoint.</p>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-900">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">When</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Query</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Results</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">User</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">When</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Query</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Results</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">User</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+              <tbody className="divide-y divide-gray-200">
                 {queries.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
                       No queries have been logged yet.
                     </td>
                   </tr>
                 ) : (
                   queries.map((query) => (
-                    <tr key={query.id} className="bg-white dark:bg-gray-950">
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200">
+                    <tr key={query.id} className="bg-white">
+                      <td className="px-4 py-3 text-gray-700">
                         {new Date(query.created_at).toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
+                      <td className="px-4 py-3 text-gray-800">
                         {query.query_text}
                       </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200">
+                      <td className="px-4 py-3 text-gray-700">
                         {query.total_results ?? '—'}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs font-mono">
+                      <td className="px-4 py-3 text-gray-500 text-xs font-mono">
                         {query.user_id ?? 'anonymous'}
                       </td>
                     </tr>
@@ -386,37 +386,37 @@ export default async function RAGDashboardPage() {
           </div>
         </section>
 
-        <section className="bg-white rounded-xl border border-gray-200 shadow-sm dark:bg-gray-950 dark:border-gray-800">
-          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Most Referenced Transcripts</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+        <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div className="px-5 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Most Referenced Transcripts</h2>
+            <p className="text-sm text-gray-600">
               Aggregated from the last {segmentIds.length} chunk mentions across recent queries.
             </p>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-900">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Transcription ID</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Audio File</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Project</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Chunk Mentions</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Transcription ID</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Audio File</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Project</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Chunk Mentions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+              <tbody className="divide-y divide-gray-200">
                 {topSources.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
                       No query activity yet.
                     </td>
                   </tr>
                 ) : (
                   topSources.map((item) => (
-                    <tr key={item.sourceId} className="bg-white dark:bg-gray-950">
-                      <td className="px-4 py-3 text-xs font-mono text-gray-600 dark:text-gray-300">{item.sourceId}</td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{item.audioName ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{item.projectName ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-900 dark:text-gray-100 font-semibold">{item.count}</td>
+                    <tr key={item.sourceId} className="bg-white">
+                      <td className="px-4 py-3 text-xs font-mono text-gray-600">{item.sourceId}</td>
+                      <td className="px-4 py-3 text-gray-800">{item.audioName ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-600">{item.projectName ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-900 font-semibold">{item.count}</td>
                     </tr>
                   ))
                 )}
@@ -434,7 +434,7 @@ function statusTint(status: string) {
     case 'queued':
       return 'bg-yellow-100 text-yellow-800'
     case 'processing':
-      return 'bg-blue-100 text-blue-800'
+      return 'bg-pink-100 text-brand-pink-dark'
     case 'complete':
       return 'bg-green-100 text-green-800'
     case 'error':

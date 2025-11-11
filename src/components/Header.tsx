@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import ThemeToggle from './ThemeToggle'
 import Breadcrumbs from './Breadcrumbs'
 
 export function Header() {
@@ -85,11 +84,11 @@ export function Header() {
   }, [user, loading])
 
   return (
-    <header className="border-b border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-800">
+    <header className="border-b border-gray-200 bg-white">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4 min-w-0">
-          <Link href={logoLink} className="text-xl font-bold text-gray-900 hover:text-gray-700 dark:text-gray-100 dark:hover:text-gray-300 whitespace-nowrap">
-            Max
+          <Link href={logoLink} className="text-xl font-bold text-keyelements-text hover:text-brand-pink whitespace-nowrap">
+            KEY ELEMENTS
           </Link>
           <div className="hidden sm:block truncate">
             <Breadcrumbs />
@@ -98,25 +97,24 @@ export function Header() {
         <nav className="flex items-center gap-4">
           {!isEditor && (
             <>
-              <Link href="/dashboard" className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100 hidden md:inline">
+              <Link href="/dashboard" className="text-keyelements-text-light hover:text-brand-pink hidden md:inline">
                 Dashboard
               </Link>
-              <Link href="/insight" className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100 hidden md:inline">
+              <Link href="/insight" className="text-keyelements-text-light hover:text-brand-pink hidden md:inline">
                 Insights
               </Link>
             </>
           )}
-          <Link href="/projects" className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100 hidden md:inline">
+          <Link href="/projects" className="text-keyelements-text-light hover:text-brand-pink hidden md:inline">
             Projects
           </Link>
-          <ThemeToggle />
           {loading ? (
             <span className="text-sm text-gray-400">Loading...</span>
           ) : user ? (
             <div className="relative">
               <button
                 onClick={() => setShowProfile(!showProfile)}
-                className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 cursor-pointer"
+                className="text-sm text-keyelements-text-light hover:text-brand-pink cursor-pointer"
               >
                 {user.user_metadata?.full_name || user.email}
               </button>
@@ -125,37 +123,37 @@ export function Header() {
               {showProfile && (
                 <div 
                   ref={profileRef}
-                  className="absolute top-10 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-6 min-w-[300px] z-50"
+                  className="absolute top-10 right-0 bg-white border border-gray-200 rounded-lg shadow-lg p-6 min-w-[300px] z-50"
                 >
-                  <h3 className="text-lg font-semibold mb-4 dark:text-gray-100">Profile</h3>
+                  <h3 className="text-lg font-semibold mb-4 text-keyelements-text">Profile</h3>
                   
                   <div className="space-y-3 mb-4">
                     <div>
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Name</p>
-                      <p className="text-sm text-gray-900 dark:text-gray-100">
+                      <p className="text-xs font-medium text-keyelements-text-light mb-1">Name</p>
+                      <p className="text-sm text-keyelements-text">
                         {user.user_metadata?.full_name || 'Not set'}
                       </p>
                     </div>
                     
                     <div>
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Email</p>
-                      <p className="text-sm text-gray-900 dark:text-gray-100">
+                      <p className="text-xs font-medium text-keyelements-text-light mb-1">Email</p>
+                      <p className="text-sm text-keyelements-text">
                         {user.email}
                       </p>
                     </div>
                     
                     <div>
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Role</p>
-                      <p className="text-sm text-gray-900 dark:text-gray-100">
+                      <p className="text-xs font-medium text-keyelements-text-light mb-1">Role</p>
+                      <p className="text-sm text-keyelements-text">
                         {user.user_metadata?.role || 'Not set'}
                       </p>
                     </div>
                   </div>
                   
-                  <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <div className="border-t border-gray-200 pt-4">
                     <button
                       onClick={handleLogout}
-                      className="w-full px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+                      className="w-full px-4 py-2 text-sm font-medium text-white bg-brand-pink rounded-lg hover:bg-brand-pink-dark"
                     >
                       Sign Out
                     </button>
@@ -164,7 +162,7 @@ export function Header() {
               )}
             </div>
           ) : (
-            <Link href="/login" className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
+            <Link href="/login" className="text-sm text-keyelements-text-light hover:text-brand-pink">
               Sign In
             </Link>
           )}

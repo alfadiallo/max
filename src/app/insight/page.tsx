@@ -255,7 +255,7 @@ function InsightPageContent() {
         <div className="flex justify-end">
           <a 
             href="/insight/search" 
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium dark:bg-blue-500 dark:hover:bg-blue-600"
+            className="px-4 py-2 bg-brand-pink text-white rounded-lg hover:bg-brand-pink-dark text-sm font-medium "
           >
             🔍 Search Transcripts
           </a>
@@ -264,7 +264,7 @@ function InsightPageContent() {
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+          <div className="animate-spin h-8 w-8 border-4 border-brand-pink border-t-transparent rounded-full"></div>
           <span className="ml-3 text-gray-600">Loading transcripts...</span>
         </div>
       ) : transcripts.length === 0 ? (
@@ -346,7 +346,7 @@ function InsightPageContent() {
                       <span className={`px-3 py-1 text-sm rounded ${
                         selectedData.metadata?.review_status === 'approved' ? 'bg-green-100 text-green-800' :
                         selectedData.metadata?.review_status === 'needs_revision' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-blue-100 text-blue-800'
+                        'bg-pink-100 text-brand-pink-dark'
                       }`}>
                         {selectedData.metadata?.review_status || 'pending'}
                       </span>
@@ -407,7 +407,7 @@ function InsightPageContent() {
                         {selectedData.metadata.procedures_discussed && selectedData.metadata.procedures_discussed.length > 0 ? (
                           <div className="flex flex-wrap gap-2">
                             {selectedData.metadata.procedures_discussed.map((proc, idx) => (
-                              <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                              <span key={idx} className="px-2 py-1 bg-pink-100 text-brand-pink-dark text-xs rounded">
                                 {proc}
                               </span>
                             ))}
@@ -460,7 +460,7 @@ function InsightPageContent() {
 
                     {/* Edit/Save controls */}
                     {isEditing && (
-                      <div className="mb-4 p-4 bg-gray-50 rounded border-2 border-blue-200">
+                      <div className="mb-4 p-4 bg-gray-50 rounded border-2 border-brand-pink-light">
                         <h3 className="text-sm font-semibold mb-3">Reconcile Metadata</h3>
                         <p className="text-xs text-gray-600 mb-4">Edit the metadata fields below to address the ambiguities.</p>
                         
@@ -553,14 +553,14 @@ function InsightPageContent() {
 
                     {/* Generate Chunks Button */}
                     {chunks.length === 0 && (
-                      <div className="mt-6 bg-white rounded-lg border border-blue-200 shadow-sm p-6">
+                      <div className="mt-6 bg-white rounded-lg border border-brand-pink-light shadow-sm p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-2">Stage 3: Generate Chunks</h2>
                         <p className="text-sm text-gray-600 mb-4">
                           Generate searchable chunks from this transcript to enable semantic search.
                         </p>
                         {generatingChunks ? (
                           <div className="flex items-center gap-3">
-                            <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                            <div className="animate-spin h-5 w-5 border-2 border-brand-pink border-t-transparent rounded-full"></div>
                             <span className="text-sm text-gray-600">Generating chunks...</span>
                           </div>
                         ) : (
@@ -609,7 +609,7 @@ function InsightPageContent() {
                           </h2>
                           <button
                             onClick={() => setShowChunkModal(true)}
-                            className="text-blue-600 hover:text-blue-700 text-lg"
+                            className="text-brand-pink hover:text-brand-pink-dark text-lg"
                             title="View chunking criteria"
                           >
                             ℹ️
@@ -623,7 +623,7 @@ function InsightPageContent() {
                             >
                               <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-3">
-                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded">
+                                  <span className="px-2 py-1 bg-pink-100 text-brand-pink-dark text-xs font-semibold rounded">
                                     Chunk {chunk.chunk_number + 1}
                                   </span>
                                   <span className="text-xs text-gray-500">
@@ -652,7 +652,7 @@ function InsightPageContent() {
                                 chunk.concepts_mentioned?.length > 0) && (
                                 <div className="flex flex-wrap gap-2 mt-2">
                                   {chunk.procedures_mentioned?.map((proc, idx) => (
-                                    <span key={idx} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded">
+                                    <span key={idx} className="px-2 py-1 bg-pink-50 text-brand-pink text-xs rounded">
                                       {proc}
                                     </span>
                                   ))}
@@ -683,7 +683,7 @@ function InsightPageContent() {
                           </h2>
                           <button
                             onClick={() => setShowContentModal(true)}
-                            className="text-blue-600 hover:text-blue-700 text-lg"
+                            className="text-brand-pink hover:text-brand-pink-dark text-lg"
                             title="View content generation criteria"
                           >
                             ℹ️

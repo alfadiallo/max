@@ -63,7 +63,7 @@ export default function RunWorkerButton() {
           : 'Run Worker Now'
 
   return (
-    <div className="flex flex-col items-stretch gap-1 text-sm text-gray-600 dark:text-gray-400">
+    <div className="flex flex-col items-stretch gap-1 text-sm text-gray-600">
       <button
         type="button"
         onClick={runWorker}
@@ -75,10 +75,10 @@ export default function RunWorkerButton() {
           {SHORTCUT_DESCRIPTOR}
         </span>
       </button>
-      <span className="text-xs text-gray-500 dark:text-gray-500">
+      <span className="text-xs text-gray-500">
         Keyboard: {SHORTCUT_DESCRIPTOR} to trigger
       </span>
-      {error && <span className="text-xs text-red-500 dark:text-red-400">{error}</span>}
+      {error && <span className="text-xs text-red-500">{error}</span>}
     </div>
   )
 }

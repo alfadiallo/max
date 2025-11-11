@@ -317,7 +317,7 @@ export default function SonixImportPage() {
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <div className="mb-6">
         <Link href="/dashboard" className="text-blue-600 hover:underline mb-2 inline-block">
-          ← Back to Dashboard
+          <ArrowLeft className="inline-block w-4 h-4 mr-1" />Back to Dashboard
         </Link>
         <h1 className="text-3xl font-bold mb-2">Import from Sonix</h1>
         <p className="text-gray-600">Import existing transcriptions from your Sonix account</p>
@@ -333,14 +333,14 @@ export default function SonixImportPage() {
         </div>
       )}
 
-      <div className="mb-6 p-4 bg-gray-50 rounded-lg dark:bg-gray-800 dark:border dark:border-gray-700">
-        <label className="block mb-2 font-medium dark:text-gray-200">
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+        <label className="block mb-2 font-medium">
           Select Project:
         </label>
         <select
           value={projectId}
           onChange={(e) => setProjectId(e.target.value)}
-          className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+          className="w-full p-2 border rounded"
         >
           {(projects || []).map(project => (
             <option key={project.id} value={project.id}>
@@ -354,7 +354,7 @@ export default function SonixImportPage() {
         <button
           onClick={loadSonixMedia}
           disabled={loadingMedia}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-brand-pink text-white rounded hover:bg-brand-pink-dark disabled:opacity-50"
         >
           {loadingMedia ? 'Loading...' : 'Refresh List'}
         </button>
@@ -373,7 +373,7 @@ export default function SonixImportPage() {
       {loadingMedia ? (
         <p className="text-gray-600">Loading Sonix media...</p>
       ) : media.length === 0 ? (
-        <div className="p-8 text-center text-gray-600 bg-gray-50 rounded dark:bg-gray-800 dark:text-gray-300">
+        <div className="p-8 text-center text-gray-600 bg-gray-50 rounded">
           <p>No media files found in Sonix account.</p>
           <p className="text-sm mt-2">Make sure SONIX_API_KEY is configured correctly.</p>
         </div>
@@ -387,30 +387,30 @@ export default function SonixImportPage() {
                 onChange={handleSelectAll}
                 className="mr-2"
               />
-              <span className="text-sm text-gray-600 dark:text-gray-300">
+              <span className="text-sm text-gray-600">
                 Select all ({notImported.length} not imported)
               </span>
             </label>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse border border-gray-300 dark:border-gray-700">
+            <table className="w-full border-collapse border border-gray-300">
               <thead>
-                <tr className="bg-gray-100 dark:bg-gray-800">
-                  <th className="border border-gray-300 dark:border-gray-700 p-2 text-left dark:text-gray-200">Select</th>
-                  <th className="border border-gray-300 dark:border-gray-700 p-2 text-left dark:text-gray-200">Name</th>
-                  <th className="border border-gray-300 dark:border-gray-700 p-2 text-left dark:text-gray-200">Type</th>
-                  <th className="border border-gray-300 dark:border-gray-700 p-2 text-left dark:text-gray-200">Duration</th>
-                  <th className="border border-gray-300 dark:border-gray-700 p-2 text-left dark:text-gray-200">Language</th>
-                  <th className="border border-gray-300 dark:border-gray-700 p-2 text-left dark:text-gray-200">Created</th>
-                  <th className="border border-gray-300 dark:border-gray-700 p-2 text-left dark:text-gray-200">Status</th>
-                  <th className="border border-gray-300 dark:border-gray-700 p-2 text-left dark:text-gray-200">Actions</th>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-300 p-2 text-left">Select</th>
+                  <th className="border border-gray-300 p-2 text-left">Name</th>
+                  <th className="border border-gray-300 p-2 text-left">Type</th>
+                  <th className="border border-gray-300 p-2 text-left">Duration</th>
+                  <th className="border border-gray-300 p-2 text-left">Language</th>
+                  <th className="border border-gray-300 p-2 text-left">Created</th>
+                  <th className="border border-gray-300 p-2 text-left">Status</th>
+                  <th className="border border-gray-300 p-2 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {(media || []).map((item) => (
-                  <tr key={item.id} className={item.imported ? 'bg-green-50 dark:bg-green-900/20' : ''}>
-                    <td className="border border-gray-300 dark:border-gray-700 p-2">
+                  <tr key={item.id} className={item.imported ? 'bg-green-50/20' : ''}>
+                    <td className="border border-gray-300 p-2">
                       {!item.imported && item.status === 'completed' && (
                         <input
                           type="checkbox"
@@ -420,52 +420,52 @@ export default function SonixImportPage() {
                         />
                       )}
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-700 p-2 dark:text-gray-200">{item.name}</td>
-                    <td className="border border-gray-300 dark:border-gray-700 p-2 dark:text-gray-200">
-                      {item.video ? '📹 Video' : '🎵 Audio'}
+                    <td className="border border-gray-300 p-2">{item.name}</td>
+                    <td className="border border-gray-300 p-2">
+                        {item.video ? <><Video className="inline-block w-4 h-4 mr-1" />Video</> : <><Music className="inline-block w-4 h-4 mr-1" />Audio</>}
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-700 p-2 dark:text-gray-200">
+                    <td className="border border-gray-300 p-2">
                       {formatDuration(item.duration)}
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-700 p-2 dark:text-gray-200 uppercase">
+                    <td className="border border-gray-300 p-2 uppercase">
                       {item.language}
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-700 p-2 dark:text-gray-200">
+                    <td className="border border-gray-300 p-2">
                       {formatDate(item.created_at)}
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-700 p-2 dark:text-gray-200">
+                    <td className="border border-gray-300 p-2">
                       <span className={`px-2 py-1 rounded text-xs ${
                         item.imported 
-                          ? 'bg-green-200 text-green-800 dark:bg-green-800 dark:text-green-200'
+                          ? 'bg-green-200 text-green-800'
                           : item.status === 'completed'
-                          ? 'bg-blue-200 text-blue-800 dark:bg-blue-800 dark:text-blue-200'
-                          : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                          ? 'bg-blue-200 text-blue-800'
+                          : 'bg-gray-200 text-gray-800'
                       }`}>
                         {item.imported ? '✓ Imported' : item.status}
                       </span>
                     </td>
-                    <td className="border border-gray-300 dark:border-gray-700 p-2">
+                    <td className="border border-gray-300 p-2">
                       {item.imported ? (
                         item.project_id ? (
                           <Link
                             href={`/projects/${item.project_id}`}
-                            className="text-blue-600 hover:underline dark:text-blue-400"
+                            className="text-blue-600 hover:underline"
                           >
                             View Project
                           </Link>
                         ) : (
-                          <span className="text-gray-400 dark:text-gray-500">-</span>
+                          <span className="text-gray-400">-</span>
                         )
                       ) : item.status === 'completed' ? (
                         <button
                           onClick={() => handleImport(item.id)}
                           disabled={importing.has(item.id) || !projectId}
-                          className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                          className="px-3 py-1 bg-brand-pink text-white rounded text-sm hover:bg-brand-pink-dark disabled:opacity-50"
                         >
                           {importing.has(item.id) ? 'Importing...' : 'Import'}
                         </button>
                       ) : (
-                        <span className="text-gray-400 dark:text-gray-500 text-sm">
+                        <span className="text-gray-400 text-sm">
                           {item.status}
                         </span>
                       )}

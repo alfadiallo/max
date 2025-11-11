@@ -1,6 +1,5 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: 'class',
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -9,10 +8,15 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        dental: {
-          primary: '#0ea5e9',
-          secondary: '#64748b',
-          accent: '#ec4899',
+        brand: {
+          pink: '#C03F8B',
+          'pink-dark': '#A03370',
+          'pink-light': '#D05FA5',
+        },
+        keyelements: {
+          text: '#212121',
+          'text-light': '#666666',
+          background: '#E1E1E1',
         }
       }
     },

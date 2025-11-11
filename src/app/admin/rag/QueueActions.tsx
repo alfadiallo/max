@@ -41,7 +41,7 @@ export default function QueueActions({ jobId, jobStatus }: QueueActionsProps) {
           type="button"
           onClick={() => handleAction('/api/admin/rag/jobs/requeue')}
           disabled={loading}
-          className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="px-3 py-1 rounded bg-brand-pink text-white hover:bg-brand-pink-dark disabled:opacity-60 disabled:cursor-not-allowed"
         >
           Retry
         </button>

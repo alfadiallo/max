@@ -176,37 +176,37 @@ export default function SegmentsTable() {
 
   return (
     <div className="space-y-4">
-      <section className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
-        <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">Filters</h2>
+      <section className="bg-white border border-gray-200 rounded-lg p-4">
+        <h2 className="text-sm font-semibold text-gray-800 mb-3">Filters</h2>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <label className="flex flex-col text-xs text-gray-600 dark:text-gray-400 gap-1">
+          <label className="flex flex-col text-xs text-gray-600 gap-1">
             Search text
             <input
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Contains text…"
-              className="rounded border border-gray-300 px-3 py-2 text-sm dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+              className="rounded border border-gray-300 px-3 py-2 text-sm"
             />
           </label>
-          <label className="flex flex-col text-xs text-gray-600 dark:text-gray-400 gap-1">
+          <label className="flex flex-col text-xs text-gray-600 gap-1">
             Source ID
             <input
               type="text"
               value={sourceId}
               onChange={(event) => setSourceId(event.target.value)}
               placeholder="UUID"
-              className="rounded border border-gray-300 px-3 py-2 text-sm dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 font-mono"
+              className="rounded border border-gray-300 px-3 py-2 text-sm font-mono"
             />
           </label>
-          <label className="flex flex-col text-xs text-gray-600 dark:text-gray-400 gap-1">
+          <label className="flex flex-col text-xs text-gray-600 gap-1">
             Version ID
             <input
               type="text"
               value={versionId}
               onChange={(event) => setVersionId(event.target.value)}
               placeholder="UUID"
-              className="rounded border border-gray-300 px-3 py-2 text-sm dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 font-mono"
+              className="rounded border border-gray-300 px-3 py-2 text-sm font-mono"
             />
           </label>
         </div>
@@ -220,7 +220,7 @@ export default function SegmentsTable() {
                 versionId,
               })
             }}
-            className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-brand-pink text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
             disabled={loading}
           >
             Apply filters
@@ -234,26 +234,26 @@ export default function SegmentsTable() {
                 setPage(1)
                 setAppliedFilters({ search: '', sourceId: '', versionId: '' })
               }}
-              className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:underline"
+              className="px-3 py-2 text-sm text-gray-600 hover:underline"
             >
               Reset
             </button>
           )}
-          <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto">
+          <span className="text-xs text-gray-500 ml-auto">
             Showing {segments.length} of {totalSegments.toLocaleString()} segments (page {pagination?.page ?? 1})
           </span>
         </div>
       </section>
 
       {error && (
-        <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-900/40 dark:border-red-800 dark:text-red-200">
+        <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700/40">
           {error}
         </div>
       )}
 
-      <section className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-          <div className="text-sm text-gray-600 dark:text-gray-300">
+      <section className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <div className="text-sm text-gray-600">
             {loading ? 'Loading segments…' : `${summaryTotals.withEmbedding} with embeddings · ${summaryTotals.withoutEmbedding} missing embeddings`}
           </div>
           {pagination && (
@@ -261,17 +261,17 @@ export default function SegmentsTable() {
               <button
                 disabled={!pagination.prevPage || loading}
                 onClick={() => pagination.prevPage && setPage(pagination.prevPage)}
-                className="px-3 py-1 rounded border border-gray-300 text-gray-600 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300"
+                className="px-3 py-1 rounded border border-gray-300 text-gray-600 disabled:opacity-40"
               >
                 Prev
               </button>
-              <span className="text-xs text-gray-500 dark:text-gray-400">
+              <span className="text-xs text-gray-500">
                 Page {pagination.page} · {Math.ceil((pagination.total || 0) / (pagination.limit || 1))} total
               </span>
               <button
                 disabled={!pagination.nextPage || loading}
                 onClick={() => pagination.nextPage && setPage(pagination.nextPage)}
-                className="px-3 py-1 rounded border border-gray-300 text-gray-600 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300"
+                className="px-3 py-1 rounded border border-gray-300 text-gray-600 disabled:opacity-40"
               >
                 Next
               </button>
@@ -280,22 +280,22 @@ export default function SegmentsTable() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-900">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Segment</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Source</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Timing</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Relevance</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Created</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Embedding</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-300">Actions</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Segment</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Source</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Timing</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Relevance</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Created</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Embedding</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+            <tbody className="divide-y divide-gray-200">
               {segments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                     {loading ? 'Loading…' : 'No segments found for this filter.'}
                   </td>
                 </tr>
@@ -306,27 +306,27 @@ export default function SegmentsTable() {
                   const versionLabel = segment.transcript_versions?.version_label || '—'
 
                   return (
-                    <tr key={segment.id} className="bg-white dark:bg-gray-950">
+                    <tr key={segment.id} className="bg-white">
                       <td className="px-4 py-3 max-w-xs align-top">
-                        <div className="text-sm text-gray-900 dark:text-gray-100 line-clamp-3">{segment.segment_text}</div>
-                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 font-mono">
+                        <div className="text-sm text-gray-900 line-clamp-3">{segment.segment_text}</div>
+                        <div className="mt-1 text-xs text-gray-500 font-mono">
                           seq {segment.sequence_number} · {segment.id.slice(0, 8)}
                         </div>
                       </td>
                       <td className="px-4 py-3 align-top">
-                        <div className="text-sm text-gray-900 dark:text-gray-100">
+                        <div className="text-sm text-gray-900">
                           {segment.content_sources?.title || audioName || 'Untitled source'}
                         </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                        <div className="text-xs text-gray-500">
                           {versionLabel} · {projectName ? `${projectName} • ` : ''}{segment.source_id.slice(0, 8)}
                         </div>
                       </td>
-                      <td className="px-4 py-3 align-top text-sm text-gray-700 dark:text-gray-200">
+                      <td className="px-4 py-3 align-top text-sm text-gray-700">
                         <div>
                           {formatTimeInterval(segment.start_timestamp)} – {formatTimeInterval(segment.end_timestamp)}
                         </div>
                       </td>
-                      <td className="px-4 py-3 align-top text-xs text-gray-600 dark:text-gray-300">
+                      <td className="px-4 py-3 align-top text-xs text-gray-600">
                         {relevanceBadges.length === 0 ? (
                           <span className="text-gray-400">n/a</span>
                         ) : (
@@ -334,7 +334,7 @@ export default function SegmentsTable() {
                             {relevanceBadges.map((badge) => (
                               <span
                                 key={badge.label}
-                                className="px-2 py-[2px] rounded-full border border-purple-200 bg-purple-50 text-purple-700 dark:bg-purple-900/40 dark:border-purple-700 dark:text-purple-200"
+                                className="px-2 py-[2px] rounded-full border border-purple-200 bg-purple-50 text-purple-700/40"
                               >
                                 {badge.label} {badge.score.toFixed(0)}
                               </span>
@@ -342,23 +342,23 @@ export default function SegmentsTable() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 align-top text-xs text-gray-600 dark:text-gray-300">
+                      <td className="px-4 py-3 align-top text-xs text-gray-600">
                         <div>{new Date(segment.created_at).toLocaleString()}</div>
                         <div className="text-gray-400">
                           {formatRelativeTime(segment.created_at)}
                         </div>
                       </td>
-                      <td className="px-4 py-3 align-top text-xs text-gray-600 dark:text-gray-300">
+                      <td className="px-4 py-3 align-top text-xs text-gray-600">
                         {segment.embedding && segment.embedding.length > 0 ? (
-                          <span className="text-green-600 dark:text-green-400">Yes</span>
+                          <span className="text-green-600">Yes</span>
                         ) : (
-                          <span className="text-red-500 dark:text-red-300">Missing</span>
+                          <span className="text-red-500">Missing</span>
                         )}
                       </td>
                       <td className="px-4 py-3 align-top text-right">
                         <button
                           onClick={() => setSelectedSegment(segment)}
-                          className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                          className="text-sm text-brand-pink hover:underline"
                         >
                           Inspect
                         </button>
@@ -378,49 +378,49 @@ export default function SegmentsTable() {
           onClick={() => setSelectedSegment(null)}
         >
           <div
-            className="bg-white dark:bg-gray-950 rounded-lg shadow-xl max-w-3xl w-full max-h-[80vh] overflow-y-auto border border-gray-200 dark:border-gray-800"
+            className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[80vh] overflow-y-auto border border-gray-200"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Segment detail</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <h3 className="text-lg font-semibold text-gray-900">Segment detail</h3>
+                <p className="text-xs text-gray-500">
                   Source {selectedSegment.source_id} · Version {selectedSegment.version_id}
                 </p>
               </div>
               <button
                 onClick={() => setSelectedSegment(null)}
-                className="text-sm text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100"
+                className="text-sm text-gray-600 hover:text-gray-800:text-gray-100"
               >
                 Close
               </button>
             </div>
 
-            <div className="px-5 py-4 space-y-4 text-sm text-gray-800 dark:text-gray-200">
+            <div className="px-5 py-4 space-y-4 text-sm text-gray-800">
               <section>
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Segment Text</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Segment Text</h4>
                 <p className="whitespace-pre-wrap leading-relaxed">{selectedSegment.segment_text}</p>
               </section>
 
               <section className="grid md:grid-cols-2 gap-3">
                 <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Timing</h4>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Timing</h4>
                   <p>
                     {formatTimeInterval(selectedSegment.start_timestamp)} – {formatTimeInterval(selectedSegment.end_timestamp)}
                   </p>
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Created</h4>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Created</h4>
                   <p>{new Date(selectedSegment.created_at).toLocaleString()}</p>
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Embedding</h4>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Embedding</h4>
                   <p>{selectedSegment.embedding && selectedSegment.embedding.length > 0 ? `${selectedSegment.embedding.length} dimensions` : 'Not available'}</p>
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Relevance</h4>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Relevance</h4>
                   {relevanceToBadges(selectedSegment.segment_relevance).length === 0 ? (
-                    <p className="text-gray-500 dark:text-gray-400">No scores yet</p>
+                    <p className="text-gray-500">No scores yet</p>
                   ) : (
                     <ul className="space-y-1">
                       {relevanceToBadges(selectedSegment.segment_relevance).map((badge) => (
@@ -431,15 +431,15 @@ export default function SegmentsTable() {
                     </ul>
                   )}
                   {selectedSegment.segment_relevance?.topics && selectedSegment.segment_relevance.topics.length > 0 && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-gray-500 mt-1">
                       Topics: {selectedSegment.segment_relevance.topics.join(', ')}
                     </p>
                   )}
                 </div>
               </section>
 
-              <section className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 text-xs text-gray-600 dark:text-gray-300">
-                <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Raw Metadata</h4>
+              <section className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-600">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Raw Metadata</h4>
                 <pre className="whitespace-pre-wrap break-words">
 {JSON.stringify({
   source: selectedSegment.content_sources,

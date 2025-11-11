@@ -66,7 +66,7 @@ export default function Breadcrumbs() {
 
   let hrefAcc = ''
   return (
-    <nav aria-label="Breadcrumb" className="text-sm text-gray-500 dark:text-gray-400">
+    <nav aria-label="Breadcrumb" className="text-sm text-gray-500">
       <ol className="flex items-center gap-2">
         {segments.map((seg, idx) => {
           hrefAcc += '/' + seg
@@ -83,7 +83,7 @@ export default function Breadcrumbs() {
             <li key={hrefAcc} className="flex items-center gap-2">
               {idx > 0 && <span className="opacity-60">/</span>}
               {isLast ? (
-                <span className="font-medium text-gray-900 dark:text-gray-100">{label}</span>
+                <span className="font-medium text-gray-900">{label}</span>
               ) : (
                 <Link href={href} className="hover:underline">
                   {label}

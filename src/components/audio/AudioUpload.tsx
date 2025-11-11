@@ -214,7 +214,7 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
   }
 
   return (
-    <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-8">
+    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
       <input
         ref={fileInputRef}
         type="file"
@@ -224,17 +224,17 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
       />
       {uploading ? (
         <div className="text-center">
-          <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2.5 mb-4">
+          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
             <div
-              className="bg-blue-600 h-2.5 rounded-full transition-all"
+              className="bg-brand-pink h-2.5 rounded-full transition-all"
               style={{ width: `${uploadProgress}%` }}
             />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-300">
+          <p className="text-sm text-gray-600">
             {compressing ? 'Compressing audio...' : 'Uploading...'} {uploadProgress}%
           </p>
           {compressing && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <p className="text-xs text-gray-500 mt-1">
               Reducing file size for faster processing
             </p>
           )}
@@ -250,10 +250,10 @@ export default function AudioUpload({ projectId, onUploadComplete }: AudioUpload
         >
           <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
           <div className="mt-4">
-            <p className="text-sm text-gray-600 dark:text-gray-300">
+            <p className="text-sm text-gray-600">
               <span className="font-medium text-blue-600 hover:text-blue-500">Click to upload</span> or drag and drop
             </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">MP3, WAV, M4A, WebM (max 500MB)</p>
+            <p className="text-xs text-gray-500 mt-2">MP3, WAV, M4A, WebM (max 500MB)</p>
           </div>
         </div>
       )}

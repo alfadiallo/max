@@ -31,18 +31,18 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white dark:bg-gray-800 rounded-lg shadow">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
         <div>
-          <h2 className="text-3xl font-bold text-center dark:text-gray-100">Reset Password</h2>
-          <p className="mt-2 text-center text-gray-600 dark:text-gray-400">
+          <h2 className="text-3xl font-bold text-center text-keyelements-text">Reset Password</h2>
+          <p className="mt-2 text-center text-keyelements-text-light">
             Enter your email address and we'll send you a link to reset your password
           </p>
         </div>
 
         {success ? (
           <div className="space-y-4">
-            <div className="bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 text-green-700 dark:text-green-200 px-4 py-3 rounded">
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
               <p className="font-medium">Check your email!</p>
               <p className="text-sm mt-1">
                 We've sent a password reset link to <strong>{email}</strong>
@@ -53,7 +53,7 @@ export default function ForgotPasswordPage() {
             </div>
             <Link
               href="/login"
-              className="block text-center text-blue-600 dark:text-blue-400 hover:text-blue-500"
+              className="block text-center text-brand-pink hover:text-brand-pink-dark"
             >
               Back to Login
             </Link>
@@ -61,12 +61,12 @@ export default function ForgotPasswordPage() {
         ) : (
           <form onSubmit={handleResetPassword} className="mt-8 space-y-6">
             {error && (
-              <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
                 {error}
               </div>
             )}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label htmlFor="email" className="block text-sm font-medium text-keyelements-text">
                 Email address
               </label>
               <input
@@ -75,21 +75,21 @@ export default function ForgotPasswordPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-keyelements-text focus:outline-none focus:ring-brand-pink focus:border-brand-pink"
                 placeholder="your@email.com"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-brand-pink hover:bg-brand-pink-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-pink disabled:opacity-50"
             >
               {loading ? 'Sending...' : 'Send Reset Link'}
             </button>
             <div className="text-center">
               <Link
                 href="/login"
-                className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-500"
+                className="text-sm text-brand-pink hover:text-brand-pink-dark"
               >
                 Back to Login
               </Link>
