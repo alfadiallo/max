@@ -114,6 +114,8 @@ export default function RAGSearchPage() {
         body: JSON.stringify({ query, limit: 15 }),
       })
       const payload = await response.json()
+      console.log('[RAG Search] Response payload:', payload)
+      console.log('[RAG Search] Results count:', payload.data?.length || 0)
       if (payload.success) {
         setResults(payload.data || [])
         setSelectedChunks(new Set((payload.data || []).map((item: RAGResult) => item.chunk_id)))
@@ -121,6 +123,7 @@ export default function RAGSearchPage() {
           setQueryId(payload.query_id)
         }
       } else {
+        console.error('[RAG Search] Error:', payload.error)
         alert(payload.error || 'Search failed')
       }
     } catch (error) {
