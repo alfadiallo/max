@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { cookies } from 'next/headers'
 import OpenAI from 'openai'
 
 export async function POST(request: Request) {
