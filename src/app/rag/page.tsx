@@ -393,13 +393,19 @@ export default function RAGSearchPage() {
                     </div>
 
                     <div className="text-gray-700 mb-4 leading-relaxed">
-                      {expandedChunks.has(result.chunk_id) ? result.chunk_text : `${result.chunk_text.slice(0, 320)}…`}
-                      <button
-                        onClick={() => toggleExpanded(result.chunk_id)}
-                        className="text-purple-600 hover:text-purple-800 ml-2 text-sm font-medium inline-flex items-center"
-                      >
-                        {expandedChunks.has(result.chunk_id) ? 'Show less' : 'Show full text'}
-                      </button>
+                      {result.chunk_text ? (
+                        <>
+                          {expandedChunks.has(result.chunk_id) ? result.chunk_text : `${result.chunk_text.slice(0, 320)}…`}
+                          <button
+                            onClick={() => toggleExpanded(result.chunk_id)}
+                            className="text-purple-600 hover:text-purple-800 ml-2 text-sm font-medium inline-flex items-center"
+                          >
+                            {expandedChunks.has(result.chunk_id) ? 'Show less' : 'Show full text'}
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-gray-400 italic">No text content available</span>
+                      )}
                     </div>
 
                     {(result.audio_file_name || result.project_name) && (
