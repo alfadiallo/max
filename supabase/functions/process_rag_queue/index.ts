@@ -14,7 +14,7 @@ declare const Deno: {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const BATCH_SIZE = Number(Deno.env.get("RAG_WORKER_BATCH") ?? "1");
-const SEGMENTS_PER_RUN = Number(Deno.env.get("RAG_SEGMENTS_PER_RUN") ?? "8");
+const SEGMENTS_PER_RUN = Number(Deno.env.get("RAG_SEGMENTS_PER_RUN") ?? "10");
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 const OPENAI_EMBEDDING_MODEL = Deno.env.get("RAG_EMBEDDING_MODEL") ?? "text-embedding-3-small";
 const EMBEDDING_CHUNK_CHAR_LIMIT = Number(Deno.env.get("RAG_EMBEDDING_CHAR_LIMIT") ?? "3200");
@@ -29,6 +29,7 @@ const FALLBACK_ANTHROPIC_MODELS = [
 ];
 const ANTHROPIC_MODEL = Deno.env.get("RAG_CLAUDE_MODEL") ?? FALLBACK_ANTHROPIC_MODELS[0];
 const CLAUDE_CONCURRENCY = Number(Deno.env.get("RAG_CLAUDE_CONCURRENCY") ?? "3");
+const ENABLE_CLAUDE_ANALYSIS = Deno.env.get("RAG_ENABLE_CLAUDE_ANALYSIS") === "true";
 const SLACK_WEBHOOK_URL = Deno.env.get("SLACK_WEBHOOK_URL") ?? "";
 const QUEUE_ALERT_THRESHOLD = Number(Deno.env.get("RAG_ALERT_QUEUE_THRESHOLD") ?? "25");
 
@@ -40,8 +41,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
-const anthropicEnabled = Boolean(ANTHROPIC_API_KEY);
-console.log("process_rag_queue: anthropicEnabled", anthropicEnabled ? "enabled" : "disabled");
+const anthropicEnabled = Boolean(ANTHROPIC_API_KEY) && ENABLE_CLAUDE_ANALYSIS;
+console.log("process_rag_queue: configuration", {
+  anthropicEnabled: anthropicEnabled ? "enabled" : "disabled",
+  claudeAnalysis: ENABLE_CLAUDE_ANALYSIS ? "enabled" : "disabled (fast mode)",
+  segmentsPerRun: SEGMENTS_PER_RUN,
+  embeddingCharLimit: EMBEDDING_CHUNK_CHAR_LIMIT,
+});
 
 type RawSegment = {
   id?: string | null;
@@ -421,7 +427,24 @@ Segment (sequence ${metadata.sequence}/${metadata.total}):
       const text = json?.content?.[0]?.text ?? "";
       if (!text) return null;
       const cleaned = text.trim().replace(/^```json/i, "").replace(/```$/, "").trim();
-      const parsed = JSON.parse(cleaned);
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch (parseError) {
+        const preview = cleaned.slice(0, 500);
+        console.error("Claude analysis JSON parse failed", {
+          model,
+          preview,
+          error: formatErrorDetail(parseError),
+        });
+        await sendSlackAlert(":warning: Claude returned unparsable JSON", {
+          model,
+          error: formatErrorDetail(parseError),
+          preview,
+        });
+        return null;
+      }
 
       const analysis: SegmentAnalysisWithModel = {
         relevance: {
@@ -516,7 +539,7 @@ serve(async (req) => {
     });
   }
 
-  const startedAt = performance.now();
+  const invocationStartedAt = performance.now();
   const jobResults: any[] = [];
 
   const { count: queuedCount } = await supabase
@@ -800,6 +823,18 @@ serve(async (req) => {
         embeddingsCreated = segmentEmbeddings.filter((embedding) => Array.isArray(embedding)).length;
         embeddingsInserted = true;
         chunkCharDiff = originalCharCount - chunkCharCount;
+        console.log("process_rag_queue: embeddings inserted", {
+          jobId: job.id,
+          versionId: version.id,
+          segmentCount: normalizedSegments.length,
+          embeddingsCreated,
+          embeddingChunksGenerated,
+        });
+      } else {
+        console.log("process_rag_queue: embeddings already present, skipping regeneration", {
+          jobId: job.id,
+          versionId: version.id,
+        });
       }
 
       const { data: insertedSegments, error: fetchInsertedError } = await supabase
@@ -823,6 +858,15 @@ serve(async (req) => {
         .filter((seg) => seg.sequence_number > lastSequenceProcessed)
         .sort((a, b) => a.sequence_number - b.sequence_number)
         .slice(0, segmentBatchLimit);
+
+      console.log("process_rag_queue: batch planning", {
+        jobId: job.id,
+        versionId: version.id,
+        lastSequenceProcessed,
+        totalSegments,
+        batchSize: segmentsToProcess.length,
+        segmentBatchLimit,
+      });
 
       let segmentsProcessedThisRun = segmentsToProcess.length;
       let runEntitiesLinked = 0;
@@ -1012,7 +1056,7 @@ serve(async (req) => {
           })
           .eq("id", version.source_id);
 
-        const finalSummary = {
+      const finalSummary = {
           notes: anthropicEnabled
             ? "Segment relevance, entities, and relationships generated."
             : "Segment embeddings generated without Claude analysis.",
@@ -1030,6 +1074,9 @@ serve(async (req) => {
           chunk_char_count: chunkCharCount,
           original_char_count: originalCharCount,
           chunk_char_difference: chunkCharDiff,
+        job_id: job.id,
+        version_id: version.id,
+        source_id: version.source_id,
         };
 
         await supabase
@@ -1065,14 +1112,17 @@ serve(async (req) => {
         chunk_char_count: chunkCharCount,
         original_char_count: originalCharCount,
         chunk_char_difference: chunkCharDiff,
+        job_id: job.id,
+        version_id: version.id,
+        source_id: version.source_id,
         progress: {
           last_sequence_processed: lastSequenceProcessed,
           total_segments: totalSegments,
           segments_processed: totalSegmentsProcessed,
           entities_linked: totalEntitiesLinked,
           relationships_linked: totalRelationshipsLinked,
-          embeddings_inserted,
-          embeddings_created,
+          embeddings_inserted: embeddingsInserted,
+          embeddings_created: embeddingsCreated,
           embedding_chunks: embeddingChunksGenerated,
           embedding_model: embeddingModel,
           claude_models: claudeModelsArray,
@@ -1082,6 +1132,9 @@ serve(async (req) => {
           total_duration_ms: totalDurationMs,
           needs_resume: true,
           updated_at: new Date().toISOString(),
+          job_id: job.id,
+          version_id: version.id,
+          source_id: version.source_id,
         },
       };
 
@@ -1093,6 +1146,17 @@ serve(async (req) => {
           result_summary: partialSummary,
         })
         .eq("id", job.id);
+
+      console.log("process_rag_queue: progress checkpoint", {
+        jobId: job.id,
+        versionId: version.id,
+        lastSequenceProcessed,
+        totalSegmentsProcessed,
+        totalSegments,
+        embeddingsCreated,
+        runDurationMs,
+        elapsedSinceStartMs: Math.round(performance.now() - invocationStartedAt),
+      });
 
       jobResults.push({
         job_id: job.id,
@@ -1123,7 +1187,7 @@ serve(async (req) => {
       ok: true,
       jobs_processed: jobResults.length,
       summary: jobResults,
-      duration_ms: Math.round(performance.now() - startedAt),
+      duration_ms: Math.round(performance.now() - invocationStartedAt),
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );

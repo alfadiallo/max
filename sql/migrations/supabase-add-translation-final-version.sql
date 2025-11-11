@@ -24,3 +24,4 @@ COMMENT ON COLUMN max_translations.final_version_id IS 'The version_id (from max
 
 
 
+
