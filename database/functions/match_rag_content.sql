@@ -2,7 +2,7 @@
 -- Vector search over content_segments for Max RAG UI
 
 create or replace function public.match_rag_content(
-  p_distance_threshold double precision default 0.5,
+  p_distance_threshold double precision default 0.7,
   p_limit integer default 10,
   p_query_embedding vector
 )

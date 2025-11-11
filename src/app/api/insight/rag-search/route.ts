@@ -3,7 +3,7 @@ import OpenAI from 'openai'
 
 export async function POST(request: Request) {
   try {
-    const { query, limit = 10, distance_threshold = 0.85 } = await request.json()
+    const { query, limit = 10, distance_threshold = 0.7 } = await request.json()
 
     if (!query) {
       return Response.json({ success: false, error: 'Query is required' }, { status: 400 })
