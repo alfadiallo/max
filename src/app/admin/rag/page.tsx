@@ -247,19 +247,19 @@ export default async function RAGDashboardPage() {
               href="/projects"
               className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-pink border border-pink-200 rounded-lg bg-white hover:bg-pink-50"
             >
-              <ArrowLeft className="inline-block w-4 h-4" /> Back to Projects
+              ← Back to Projects
             </Link>
               <Link
                 href="/admin/rag/segments"
                 className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 border border-purple-200 rounded-lg bg-white hover:bg-purple-50"
               >
-                View Segments <ArrowRight className="inline-block w-4 h-4" />
+                View Segments →
               </Link>
               <Link
                 href="/admin/rag/queries"
                 className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-green-700 border border-green-200 rounded-lg bg-white hover:bg-green-50"
               >
-                View Queries <ArrowRight className="inline-block w-4 h-4" />
+                View Queries →
               </Link>
               <RunWorkerButton />
           </div>

@@ -55,7 +55,7 @@ export default async function RAGQueriesPage() {
             href="/admin/rag"
             className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-pink border border-pink-200 rounded-lg bg-white hover:bg-pink-50"
           >
-            <ArrowLeft className="inline-block w-4 h-4" /> Back to Dashboard
+            ← Back to Dashboard
           </Link>
         </div>
 
@@ -154,7 +154,7 @@ export default async function RAGQueriesPage() {
         {queriesList.length > 0 && (
           <div className="bg-pink-50/20 border border-pink-200 rounded-lg p-4">
             <h3 className="text-sm font-medium text-brand-pink-dark mb-2">
-              <BarChart className="inline-block w-4 h-4 mr-1" /> Query Analytics
+              📊 Query Analytics
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
