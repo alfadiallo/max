@@ -249,13 +249,19 @@ export default async function RAGDashboardPage() {
             >
               ← Back to Projects
             </Link>
-            <Link
-              href="/admin/rag/segments"
-              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 border border-purple-200 rounded-lg bg-white hover:bg-purple-50 dark:bg-gray-950 dark:text-purple-300 dark:border-purple-700"
-            >
-              View Segments →
-            </Link>
-            <RunWorkerButton />
+              <Link
+                href="/admin/rag/segments"
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 border border-purple-200 rounded-lg bg-white hover:bg-purple-50 dark:bg-gray-950 dark:text-purple-300 dark:border-purple-700"
+              >
+                View Segments →
+              </Link>
+              <Link
+                href="/admin/rag/queries"
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-green-700 border border-green-200 rounded-lg bg-white hover:bg-green-50 dark:bg-gray-950 dark:text-green-300 dark:border-green-700"
+              >
+                View Queries →
+              </Link>
+              <RunWorkerButton />
           </div>
         </div>
 
