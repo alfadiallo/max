@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { cookies } from 'next/headers'
 import OpenAI from 'openai'
 
 export async function POST(request: Request) {
@@ -18,7 +17,6 @@ export async function POST(request: Request) {
 
     if (!user) {
       console.error('[RAG Search] No user found - auth issue')
-      console.error('[RAG Search] Cookies:', await cookies().then(c => c.getAll().map(c => c.name)))
       return Response.json({ success: false, error: 'Unauthorized - session expired. Please sign in again.' }, { status: 401 })
     }
 
