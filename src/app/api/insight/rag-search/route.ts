@@ -16,8 +16,12 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      return Response.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+      console.error('[RAG Search] No user found - auth issue')
+      console.error('[RAG Search] Cookies:', await cookies().then(c => c.getAll().map(c => c.name)))
+      return Response.json({ success: false, error: 'Unauthorized - session expired. Please sign in again.' }, { status: 401 })
     }
+
+    console.log('[RAG Search] Authenticated user:', user.id)
 
     const openai = new OpenAI()
     const response = await openai.embeddings.create({
