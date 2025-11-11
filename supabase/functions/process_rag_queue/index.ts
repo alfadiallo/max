@@ -729,112 +729,146 @@ serve(async (req) => {
 
       const segmentBatchLimit = Math.max(1, SEGMENTS_PER_RUN);
 
-      if (!embeddingsInserted) {
-        const segmentEmbeddings: Array<number[] | null> = normalizedSegments.map(() => null);
+      // Check if we already have content_segments (embeddings already generated)
+      const { data: existingSegments, error: existingCheckError } = await supabase
+        .from("content_segments")
+        .select("id, sequence_number")
+        .eq("version_id", version.id)
+        .order("sequence_number", { ascending: true });
 
-        if (openai) {
-          for (let idx = 0; idx < normalizedSegments.length; idx += 1) {
-            const segment = normalizedSegments[idx];
-            const chunks = chunkTextForEmbedding(segment.text);
-            if (chunks.length === 0) {
-              console.warn("process_rag_queue: segment produced no chunks for embedding", {
-                versionId: version.id,
-                sequence: segment.sequence_number,
-              });
-              continue;
-            }
+      if (existingCheckError) {
+        console.error("process_rag_queue: failed to check existing segments", existingCheckError);
+        await supabase
+          .from("rag_ingestion_queue")
+          .update({ status: "error", error_detail: formatErrorDetail(existingCheckError) })
+          .eq("id", job.id);
+        continue;
+      }
 
-            const chunkVectors: number[][] = [];
-            try {
-              for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH_SIZE) {
-                const batch = chunks.slice(start, start + EMBEDDING_BATCH_SIZE);
-                const response = await openai.embeddings.create({
-                  model: OPENAI_EMBEDDING_MODEL,
-                  input: batch,
-                });
-                embeddingModel = response.model ?? OPENAI_EMBEDDING_MODEL;
-                response.data.forEach((item) => {
-                  embeddingChunksGenerated += 1;
-                  chunkVectors.push(item.embedding as number[]);
-                });
-              }
-            } catch (embeddingError) {
-              console.error("process_rag_queue: embedding generation failed", {
-                versionId: version.id,
-                sequence: segment.sequence_number,
-                error: embeddingError,
-              });
-              await sendSlackAlert(":warning: RAG embedding generation failed", {
-                version_id: version.id,
-                segment_sequence: segment.sequence_number,
-                error: formatErrorDetail(embeddingError),
-              });
-            }
+      const hasExistingSegments = existingSegments && existingSegments.length > 0;
 
-            const averaged = averageVectors(chunkVectors);
-            if (averaged) {
-              segmentEmbeddings[idx] = averaged;
-            }
-          }
-        } else {
-          console.warn("process_rag_queue: OPENAI_API_KEY missing, skipping embedding generation");
-        }
-
-        const { error: deleteContentError } = await supabase
-          .from("content_segments")
-          .delete()
-          .eq("version_id", version.id);
-
-        if (deleteContentError) {
-          console.error("process_rag_queue: failed to clear previous content segments", job.id, deleteContentError);
-        }
-
-        const contentRows = normalizedSegments.map((segment, idx) => ({
-          source_id: version.source_id,
-          version_id: version.id,
-          segment_text: segment.text,
-          sequence_number: segment.sequence_number,
-          start_timestamp: segment.start_time ?? null,
-          end_timestamp: segment.end_time ?? null,
-          embedding: segmentEmbeddings[idx] ?? null,
-          metadata: {
-            transcript_version_id: version.id,
-            transcript_segment_id: segment.id ?? null,
-          },
-        }));
-
-        const { error: contentError } = await supabase
-          .from("content_segments")
-          .insert(contentRows);
-
-        if (contentError) {
-          await supabase
-            .from("rag_ingestion_queue")
-            .update({ status: "error", error_detail: formatErrorDetail(contentError) })
-            .eq("id", job.id);
-          continue;
-        }
-
-        console.log("process_rag_queue: inserted content segments", {
-          jobId: job.id,
-          inserted: contentRows.length,
-        });
-
-        embeddingsCreated = segmentEmbeddings.filter((embedding) => Array.isArray(embedding)).length;
-        embeddingsInserted = true;
-        chunkCharDiff = originalCharCount - chunkCharCount;
-        console.log("process_rag_queue: embeddings inserted", {
+      if (!hasExistingSegments && openai) {
+        // Generate embeddings for segments we haven't processed yet
+        const segmentsToEmbed = normalizedSegments.filter(seg => seg.sequence_number > lastSequenceProcessed).slice(0, segmentBatchLimit);
+        
+        console.log("process_rag_queue: generating embeddings for batch", {
           jobId: job.id,
           versionId: version.id,
-          segmentCount: normalizedSegments.length,
+          batchSize: segmentsToEmbed.length,
+          lastSequenceProcessed,
+        });
+
+        for (const segment of segmentsToEmbed) {
+          const chunks = chunkTextForEmbedding(segment.text);
+          if (chunks.length === 0) {
+            console.warn("process_rag_queue: segment produced no chunks for embedding", {
+              versionId: version.id,
+              sequence: segment.sequence_number,
+            });
+            continue;
+          }
+
+          const chunkVectors: number[][] = [];
+          try {
+            for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH_SIZE) {
+              const batch = chunks.slice(start, start + EMBEDDING_BATCH_SIZE);
+              const response = await openai.embeddings.create({
+                model: OPENAI_EMBEDDING_MODEL,
+                input: batch,
+              });
+              embeddingModel = response.model ?? OPENAI_EMBEDDING_MODEL;
+              response.data.forEach((item) => {
+                embeddingChunksGenerated += 1;
+                chunkVectors.push(item.embedding as number[]);
+              });
+            }
+          } catch (embeddingError) {
+            console.error("process_rag_queue: embedding generation failed", {
+              versionId: version.id,
+              sequence: segment.sequence_number,
+              error: embeddingError,
+            });
+            await sendSlackAlert(":warning: RAG embedding generation failed", {
+              version_id: version.id,
+              segment_sequence: segment.sequence_number,
+              error: formatErrorDetail(embeddingError),
+            });
+            continue;
+          }
+
+          const averaged = averageVectors(chunkVectors);
+          if (!averaged) {
+            console.warn("process_rag_queue: failed to average embedding vectors", {
+              versionId: version.id,
+              sequence: segment.sequence_number,
+            });
+            continue;
+          }
+
+          // Insert this segment immediately
+          const { error: insertError } = await supabase
+            .from("content_segments")
+            .insert({
+              source_id: version.source_id,
+              version_id: version.id,
+              segment_text: segment.text,
+              sequence_number: segment.sequence_number,
+              start_timestamp: segment.start_time ?? null,
+              end_timestamp: segment.end_time ?? null,
+              embedding: averaged,
+              metadata: {
+                transcript_version_id: version.id,
+                transcript_segment_id: segment.id ?? null,
+              },
+            });
+
+          if (insertError) {
+            console.error("process_rag_queue: failed to insert segment", {
+              versionId: version.id,
+              sequence: segment.sequence_number,
+              error: insertError,
+            });
+            await sendSlackAlert(":warning: RAG segment insert failed", {
+              version_id: version.id,
+              segment_sequence: segment.sequence_number,
+              error: formatErrorDetail(insertError),
+            });
+            continue;
+          }
+
+          embeddingsCreated += 1;
+          lastSequenceProcessed = segment.sequence_number;
+          totalSegmentsProcessed += 1;
+
+          console.log("process_rag_queue: segment embedded and inserted", {
+            jobId: job.id,
+            sequence: segment.sequence_number,
+            progress: `${totalSegmentsProcessed}/${totalSegments}`,
+          });
+        }
+
+        embeddingsInserted = totalSegmentsProcessed >= totalSegments;
+        chunkCharDiff = originalCharCount - chunkCharCount;
+
+        console.log("process_rag_queue: embedding batch complete", {
+          jobId: job.id,
+          versionId: version.id,
           embeddingsCreated,
           embeddingChunksGenerated,
+          lastSequenceProcessed,
+          totalSegmentsProcessed,
+          totalSegments,
         });
-      } else {
+      } else if (hasExistingSegments) {
         console.log("process_rag_queue: embeddings already present, skipping regeneration", {
           jobId: job.id,
           versionId: version.id,
+          existingCount: existingSegments.length,
         });
+        embeddingsInserted = true;
+        embeddingsCreated = existingSegments.length;
+      } else if (!openai) {
+        console.warn("process_rag_queue: OPENAI_API_KEY missing, skipping embedding generation");
       }
 
       const { data: insertedSegments, error: fetchInsertedError } = await supabase
@@ -872,7 +906,12 @@ serve(async (req) => {
       let runEntitiesLinked = 0;
       let runRelationshipsLinked = 0;
 
-      if (segmentsProcessedThisRun > 0) {
+      if (segmentsProcessedThisRun > 0 && anthropicEnabled) {
+        console.log("process_rag_queue: starting Claude analysis for batch", {
+          jobId: job.id,
+          batchSize: segmentsToProcess.length,
+        });
+
         const claudeSummaries = await mapWithConcurrency(segmentsToProcess, CLAUDE_CONCURRENCY, async (inserted) => {
           const segment = normalizedBySequence.get(inserted.sequence_number);
           if (!segment) {
@@ -881,24 +920,17 @@ serve(async (req) => {
           }
 
           let analysis: SegmentAnalysisWithModel | null = null;
-          if (anthropicEnabled) {
-            analysis = await analyzeSegmentWithClaude(segment.text, {
-              sequence: segment.sequence_number,
-              total: totalSegments,
-              projectName: version.metadata_json?.project_name ?? null,
-              audioName: version.metadata_json?.audio_file_name ?? null,
-            });
-            console.log("process_rag_queue: claude analysis", {
-              jobId: job.id,
-              sequence: segment.sequence_number,
-              analysis,
-            });
-          } else {
-            console.log("process_rag_queue: claude skipped (disabled)", {
-              jobId: job.id,
-              sequence: segment.sequence_number,
-            });
-          }
+          analysis = await analyzeSegmentWithClaude(segment.text, {
+            sequence: segment.sequence_number,
+            total: totalSegments,
+            projectName: version.metadata_json?.project_name ?? null,
+            audioName: version.metadata_json?.audio_file_name ?? null,
+          });
+          console.log("process_rag_queue: claude analysis", {
+            jobId: job.id,
+            sequence: segment.sequence_number,
+            analysis,
+          });
 
           const relevance = analysis?.relevance ?? {};
 
@@ -1027,6 +1059,34 @@ serve(async (req) => {
         for (const summary of claudeSummaries) {
           runEntitiesLinked += summary.entitiesLinked;
           runRelationshipsLinked += summary.relationshipsLinked;
+        }
+      } else if (segmentsProcessedThisRun > 0) {
+        // Claude is disabled, just mark segments as processed
+        console.log("process_rag_queue: Claude analysis disabled, marking segments as processed", {
+          jobId: job.id,
+          batchSize: segmentsToProcess.length,
+        });
+        
+        // Insert empty segment_relevance rows so we can track progress
+        for (const inserted of segmentsToProcess) {
+          await supabase
+            .from("segment_relevance")
+            .upsert(
+              {
+                segment_id: inserted.id,
+                relevance_dentist: null,
+                relevance_dental_assistant: null,
+                relevance_hygienist: null,
+                relevance_treatment_coordinator: null,
+                relevance_align_rep: null,
+                content_type: null,
+                clinical_complexity: null,
+                primary_focus: null,
+                topics: [],
+                confidence_score: null,
+              },
+              { onConflict: "segment_id" },
+            );
         }
       }
 
